@@ -1,4 +1,17 @@
 import { useState, useEffect, useRef } from "react";
+import { db } from "./firebase";
+import { collection, doc, setDoc, deleteDoc, onSnapshot } from "firebase/firestore";
+
+// ─── Firebase sync helpers ────────────────────────────────────
+async function fbSave(client) {
+  try {
+    const clean = JSON.parse(JSON.stringify(client));
+    await setDoc(doc(db, "clients", String(client.id)), clean);
+  } catch(e) { console.error("fbSave error", e); }
+}
+async function fbDelete(id) {
+  try { await deleteDoc(doc(db, "clients", String(id))); } catch(e) {}
+}
 
 // ─── STRENGTH STANDARDS ───────────────────────────────────────
 const STANDARDS = {
@@ -547,10 +560,7 @@ function mkClient(id, idx, name, gender, age){
 function avatarGrad(id){ const hues=[16,24,28,32,20,18,12,36,22,26,14,30,10,34]; const h=hues[(id-1)%hues.length]; return `linear-gradient(135deg,hsl(${h},90%,45%),hsl(${h+15},80%,35%))`; }
 
 export default function App(){
-  const [clients,setClients]=useState(()=>{
-    try{ const s=JSON.parse(localStorage.getItem("vector_v2")); if(s){nextId=Math.max(...s.map(c=>c.id))+1;return s.map(c=>({targets:[],...c}));} }catch{}
-    return Array.from({length:14},(_,i)=>mkClient(i+1,i));
-  });
+  const [clients,setClients]=useState(null);
   const [view,setView]=useState("dashboard");
   const [selId,setSelId]=useState(null);
   const [tab,setTab]=useState("score");
@@ -563,14 +573,45 @@ export default function App(){
   const [newCF,setNewCF]=useState({name:"",gender:"male",age:""});
   const [confirmDel,setConfirmDel]=useState(null);
 
-  useEffect(()=>{ localStorage.setItem("vector_v2",JSON.stringify(clients)); },[clients]);
+  // ── Load from Firestore on mount ──
+  useEffect(()=>{
+    const unsub = onSnapshot(collection(db,"clients"), async snap=>{
+      if(snap.empty){
+        const init = Array.from({length:14},(_,i)=>mkClient(i+1,i));
+        for(const c of init) await fbSave(c);
+      } else {
+        const data = snap.docs.map(d=>({targets:[],photos:[],cardioLogs:[],strengthLogs:[],bodyStats:[],program:"",...d.data()})).sort((a,b)=>a.id-b.id);
+        nextId = Math.max(...data.map(c=>c.id))+1;
+        setClients(data);
+      }
+    });
+    return ()=>unsub();
+  },[]);
+
+  // ── Save to Firestore whenever clients change ──
+  useEffect(()=>{
+    if(!clients) return;
+    clients.forEach(c=>fbSave(c));
+  },[clients]);
+
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
   const upd=(id,fn)=>setClients(cs=>cs.map(c=>c.id===id?fn({...c}):c));
   const updClient=(id,next)=>setClients(cs=>cs.map(c=>c.id===id?{...next}:c));
-  const client=clients.find(c=>c.id===selId);
+  const client=clients?.find(c=>c.id===selId);
 
-  const addClient=()=>{ if(!newCF.name.trim())return; const id=nextId++; setClients(cs=>[...cs,mkClient(id,id-1,newCF.name,newCF.gender,+newCF.age||25)]); setNewCF({name:"",gender:"male",age:""}); setShowAddClient(false); showToast(`✓ เพิ่ม ${newCF.name}`); };
-  const delClient=id=>{ setClients(cs=>cs.filter(c=>c.id!==id)); if(view==="client")setView("dashboard"); setConfirmDel(null); showToast("✓ ลบแล้ว"); };
+  if(!clients) return (
+    <div style={{minHeight:"100vh",background:"#080810",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
+      <svg width="56" height="56" viewBox="0 0 100 100" fill="none">
+        <defs><linearGradient id="vg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#F97316"/><stop offset="100%" stopColor="#FDBA74"/></linearGradient></defs>
+        <polygon points="50,8 92,75 8,75" fill="none" stroke="url(#vg)" strokeWidth="7" strokeLinejoin="round"/>
+        <polygon points="50,30 72,60 50,82 28,60" fill="none" stroke="url(#vg)" strokeWidth="7" strokeLinejoin="round"/>
+      </svg>
+      <div style={{color:"#F97316",fontFamily:"sans-serif",fontWeight:700,fontSize:16}}>กำลังโหลด...</div>
+    </div>
+  );
+
+  const addClient=()=>{ if(!newCF.name.trim())return; const id=nextId++; const nc=mkClient(id,id-1,newCF.name,newCF.gender,+newCF.age||25); setClients(cs=>[...cs,nc]); setNewCF({name:"",gender:"male",age:""}); setShowAddClient(false); showToast(`✓ เพิ่ม ${newCF.name}`); };
+  const delClient=id=>{ fbDelete(id); setClients(cs=>cs.filter(c=>c.id!==id)); if(view==="client")setView("dashboard"); setConfirmDel(null); showToast("✓ ลบแล้ว"); };
   const saveBody=()=>{ if(!form.date||!form.weight)return; upd(selId,c=>({...c,bodyStats:[...c.bodyStats,{date:form.date,weight:+form.weight,fat:+form.fat||0,muscle:+form.muscle||0}].sort((a,b)=>a.date.localeCompare(b.date))})); setForm({});setAddMode(null);showToast("✓ บันทึกข้อมูลร่างกาย"); };
   const saveStrength=()=>{ if(!form.date||!form.exercise||!form.weight)return; upd(selId,c=>({...c,strengthLogs:[...c.strengthLogs,{date:form.date,exercise:form.exercise,weight:+form.weight,reps:+form.reps||1,sets:+form.sets||1}].sort((a,b)=>a.date.localeCompare(b.date))})); setForm({});setAddMode(null);showToast("✓ บันทึกความแข็งแรง"); };
   const saveCardio=()=>{ if(!form.date||!form.cardioType||!form.value)return; upd(selId,c=>({...c,cardioLogs:[...(c.cardioLogs||[]),{date:form.date,type:form.cardioType,value:+form.value}].sort((a,b)=>a.date.localeCompare(b.date))})); setForm({});setAddMode(null);showToast("✓ บันทึกความฟิต"); };
