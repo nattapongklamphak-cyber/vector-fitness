@@ -602,10 +602,86 @@ function TargetTab({ client, onUpdate }) {
 // ─── REPORT TAB ──────────────────────────────────────────────
 function ReportTab({ client }) {
   const periods = getBimonthlyPeriods(client.startDate);
+  const [mode, setMode] = useState("preset"); // "preset" | "custom"
   const [selPeriod, setSelPeriod] = useState(periods[0]?.key||"");
-  const period = periods.find(p=>p.key===selPeriod);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const printRef = useRef();
+
+  let period = null;
+  if (mode==="preset") {
+    period = periods.find(p=>p.key===selPeriod);
+  } else if (customFrom && customTo) {
+    period = { key:"custom", label:`${customFrom} ถึง ${customTo}`, from:customFrom, to:customTo };
+  }
+
   const report = period ? buildReport(client, period) : null;
   const { bsFirst, bsLast, prByEx, bestBurpee, prevBurpee, scNow } = report||{};
+
+  const handlePDF = () => {
+    const el = printRef.current;
+    if (!el) return;
+    const orig = document.body.innerHTML;
+    const style = `
+      <style>
+        body { font-family: 'Sarabun', sans-serif; background: #fff; color: #1C1917; padding: 32px; }
+        .pdf-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; border-bottom: 3px solid #F97316; padding-bottom: 16px; }
+        .pdf-title { font-size: 24px; font-weight: 800; color: #F97316; }
+        .pdf-sub { font-size: 12px; color: #888; }
+        .pdf-card { background: #F9F9F9; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+        .pdf-card-title { font-size: 15px; font-weight: 700; margin-bottom: 12px; color: #1C1917; }
+        .pdf-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
+        .pdf-stat { background: #fff; border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px; text-align: center; }
+        .pdf-stat-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+        .pdf-stat-val { font-size: 22px; font-weight: 800; }
+        .pdf-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #E5E7EB; font-size: 13px; }
+        .green { color: #16A34A; } .red { color: #DC2626; } .orange { color: #F97316; }
+        @media print { body { padding: 16px; } }
+      </style>
+    `;
+    const rnk = getRank(scNow?.total||0);
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>VECTOR Report</title>${style}</head><body>
+      <div class="pdf-header">
+        <div>
+          <div class="pdf-title">⚡ VECTOR FITNESS STUDIO</div>
+          <div class="pdf-sub">Personal Trainer CTAM · รายงานพัฒนาการ</div>
+        </div>
+      </div>
+      <div class="pdf-card">
+        <div class="pdf-card-title">📋 ข้อมูลลูกค้า</div>
+        <div class="pdf-row"><span>ชื่อ</span><span><b>${client.name}</b></span></div>
+        <div class="pdf-row"><span>เพศ / อายุ</span><span>${client.gender==="female"?"♀ หญิง":"♂ ชาย"} / ${client.age} ปี</span></div>
+        <div class="pdf-row"><span>เป้าหมาย</span><span>${(client.goals||[]).join(", ")||"—"}</span></div>
+        <div class="pdf-row"><span>ช่วงเวลา</span><span><b>${period?.label||""}</b></span></div>
+        <div class="pdf-row"><span>Rank</span><span><b>${rnk.rank} · ${scNow?.total||0} pts</b></span></div>
+      </div>
+      ${bsLast?`<div class="pdf-card">
+        <div class="pdf-card-title">📊 การเปลี่ยนแปลงร่างกาย</div>
+        <div class="pdf-grid">
+          <div class="pdf-stat"><div class="pdf-stat-label">น้ำหนัก</div><div class="pdf-stat-val orange">${bsLast.weight}<span style="font-size:12px">kg</span></div>${bsFirst&&bsLast!==bsFirst?`<div class="${(bsLast.weight-bsFirst.weight)<0?"green":"red"}">${(bsLast.weight-bsFirst.weight)>0?"+":""}${(bsLast.weight-bsFirst.weight).toFixed(1)}kg</div>`:""}</div>
+          <div class="pdf-stat"><div class="pdf-stat-label">ไขมัน</div><div class="pdf-stat-val" style="color:#60a5fa">${bsLast.fat}<span style="font-size:12px">%</span></div>${bsFirst&&bsLast!==bsFirst?`<div class="${(bsLast.fat-bsFirst.fat)<0?"green":"red"}">${(bsLast.fat-bsFirst.fat)>0?"+":""}${(bsLast.fat-bsFirst.fat).toFixed(1)}%</div>`:""}</div>
+          <div class="pdf-stat"><div class="pdf-stat-label">กล้ามเนื้อ</div><div class="pdf-stat-val" style="color:#34d399">${bsLast.muscle}<span style="font-size:12px">%</span></div>${bsFirst&&bsLast!==bsFirst?`<div class="${(bsLast.muscle-bsFirst.muscle)>0?"green":"red"}">${(bsLast.muscle-bsFirst.muscle)>0?"+":""}${(bsLast.muscle-bsFirst.muscle).toFixed(1)}%</div>`:""}</div>
+        </div>
+      </div>`:""}
+      ${prByEx?.length?`<div class="pdf-card">
+        <div class="pdf-card-title">💪 ความแข็งแรง (PR)</div>
+        ${prByEx.map(({ex,prevBest,periodBest,isPR})=>`<div class="pdf-row"><span>${ex}</span><span>${prevBest?`${prevBest}kg → `:""}<b class="${isPR?"orange":""}">${periodBest}kg${isPR?" 🏆":""}</b></span></div>`).join("")}
+      </div>`:""}
+      ${scNow?`<div class="pdf-card">
+        <div class="pdf-card-title">🏆 คะแนนรวม</div>
+        <div class="pdf-row"><span>💪 ความแข็งแรง</span><span class="orange"><b>${scNow.strengthPts} pts</b></span></div>
+        <div class="pdf-row"><span>📊 ร่างกาย</span><span style="color:#60a5fa"><b>${scNow.bodyPts} pts</b></span></div>
+        <div class="pdf-row"><span>🫀 ฟิต</span><span style="color:#34d399"><b>${scNow.cardioPts} pts</b></span></div>
+        <div class="pdf-row"><span><b>รวมทั้งหมด</b></span><span><b class="orange">${scNow.total} pts · ${rnk.rank}</b></span></div>
+      </div>`:""}
+      <div style="text-align:center;font-size:11px;color:#aaa;margin-top:24px">VECTOR FITNESS STUDIO · Personal Trainer CTAM · พิมพ์วันที่ ${new Date().toLocaleDateString("th-TH")}</div>
+    </body></html>`;
+    const w = window.open("","_blank");
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(()=>{ w.print(); }, 500);
+  };
 
   const Delta = ({ val, lowerBetter=false, unit="" }) => {
     if (val===undefined||val===null) return <span style={{color:D.dim}}>—</span>;
@@ -615,14 +691,27 @@ function ReportTab({ client }) {
   };
 
   return (
-    <div>
-      {/* Period selector */}
-      <div style={{marginBottom:16}}>
-        <Lbl>เลือกช่วงเวลา (ทุก 2 เดือน)</Lbl>
+    <div ref={printRef}>
+      {/* Mode selector */}
+      <div style={{display:"flex",gap:8,marginBottom:14}}>
+        {[["preset","📅 ทุก 2 เดือน"],["custom","🗓 เลือกเองได้"]].map(([m,l])=>(
+          <button key={m} onClick={()=>setMode(m)} style={{flex:1,padding:"9px 0",borderRadius:10,border:`1.5px solid ${mode===m?D.orange:D.border}`,cursor:"pointer",background:mode===m?D.orange:"transparent",color:mode===m?"#fff":D.sub,fontWeight:600,fontSize:13,fontFamily:"inherit"}}>{l}</button>
+        ))}
+      </div>
+
+      {mode==="preset"&&<div style={{marginBottom:16}}>
+        <Lbl>เลือกช่วงเวลา</Lbl>
         <Sel value={selPeriod} onChange={e=>setSelPeriod(e.target.value)}>
           {periods.map(p=><option key={p.key} value={p.key}>{p.label}</option>)}
         </Sel>
-      </div>
+      </div>}
+
+      {mode==="custom"&&<div style={{marginBottom:16}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <div><Lbl>วันเริ่ม</Lbl><Inp type="date" value={customFrom} onChange={e=>setCustomFrom(e.target.value)}/></div>
+          <div><Lbl>วันสิ้นสุด</Lbl><Inp type="date" value={customTo} onChange={e=>setCustomTo(e.target.value)}/></div>
+        </div>
+      </div>}
 
       {!period && <div style={{textAlign:"center",color:D.dim,padding:"40px 0"}}>ไม่มีข้อมูล</div>}
 
@@ -747,6 +836,8 @@ function ReportTab({ client }) {
               </div>
             </div>
           </Crd>
+          {/* PDF Export */}
+          <OBtn onClick={handlePDF} style={{marginTop:8,background:"linear-gradient(135deg,#7C3AED,#5B21B6)"}}>📄 Export PDF รายงาน</OBtn>
         </>
       )}
     </div>
