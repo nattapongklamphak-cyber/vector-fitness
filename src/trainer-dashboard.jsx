@@ -274,6 +274,212 @@ function PhotoSection({photos=[],onAdd,onDelete}){
   );
 }
 
+// ─── HYROX TAB ───────────────────────────────────────────────
+const HYROX_LEVELS = [
+  { label:"Finisher",    color:"#6b7280", time:"2:00:00+",  maxSec:999999 },
+  { label:"Intermediate",color:"#60a5fa", time:"1:30–2:00", maxSec:7200 },
+  { label:"Advanced",    color:"#34d399", time:"1:15–1:30", maxSec:5400 },
+  { label:"Elite",       color:"#f97316", time:"<1:15",     maxSec:4500 },
+];
+const THRESHOLD_TABLE = [
+  { level:"Beginner",    pace:">5:30 /km",    color:"#6b7280" },
+  { level:"Intermediate",pace:"4:30–5:30 /km",color:"#60a5fa" },
+  { level:"Advanced",    pace:"<4:30 /km",    color:"#34d399" },
+];
+
+function parsePace(str) {
+  if (!str) return null;
+  const parts = str.split(":");
+  if (parts.length === 2) return parseInt(parts[0])*60 + parseInt(parts[1]);
+  return null;
+}
+function secToTime(sec) {
+  const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+  return `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+function getHyroxLevel(totalSec) {
+  if (totalSec < 4500) return HYROX_LEVELS[3];
+  if (totalSec < 5400) return HYROX_LEVELS[2];
+  if (totalSec < 7200) return HYROX_LEVELS[1];
+  return HYROX_LEVELS[0];
+}
+function analyzeAerobic(curr, prev) {
+  if (!prev) return null;
+  const currPace = parsePace(curr.pace), prevPace = parsePace(prev.pace);
+  const paceImproved = currPace < prevPace;
+  const paceSame = Math.abs(currPace - prevPace) <= 5;
+  const hrLower = curr.hr < prev.hr;
+  const hrMuch = curr.hr > prev.hr + 10;
+  if (paceImproved && !hrMuch) return { icon:"✅", label:"Aerobic Improved", color:"#34d399", desc:`Pace เร็วขึ้น ${prevPace-currPace}วิ/km · HR ${hrLower?"ลดลง":"คงที่"}` };
+  if (paceSame && hrLower) return { icon:"✅", label:"Efficiency Improved", color:"#60a5fa", desc:`Pace เท่าเดิม · HR ลดลง ${prev.hr-curr.hr} bpm` };
+  if (paceImproved && hrMuch) return { icon:"⚠️", label:"Check Form / Overreaching", color:"#f59e0b", desc:"Pace เร็วขึ้นแต่ HR สูงมาก อาจ overreach" };
+  return { icon:"➡️", label:"No Change", color:"#888", desc:"ยังไม่มีการเปลี่ยนแปลงที่ชัดเจน" };
+}
+
+function HyroxTab({ client, onUpdate }) {
+  const hyrox = client.hyrox || { tests:[], raceGoalSec:"", raceLogs:[] };
+  const [showTestForm, setShowTestForm] = useState(false);
+  const [showRaceForm, setShowRaceForm] = useState(false);
+  const [testForm, setTestForm] = useState({ date:"", type:"Running", pace:"", hr:"", rpe:"", note:"" });
+  const [raceForm, setRaceForm] = useState({ date:"", totalTime:"", note:"" });
+  const [goalInput, setGoalInput] = useState(hyrox.raceGoalSec||"");
+
+  const saveTest = () => {
+    if (!testForm.date||!testForm.pace||!testForm.hr) return;
+    const updated = { ...hyrox, tests:[...(hyrox.tests||[]), {...testForm,hr:+testForm.hr,rpe:+testForm.rpe}].sort((a,b)=>a.date.localeCompare(b.date)) };
+    onUpdate({...client, hyrox:updated});
+    setTestForm({date:"",type:"Running",pace:"",hr:"",rpe:"",note:""});
+    setShowTestForm(false);
+  };
+  const saveRace = () => {
+    if (!raceForm.date||!raceForm.totalTime) return;
+    const [h,m,s] = raceForm.totalTime.split(":").map(Number);
+    const sec = (h||0)*3600+(m||0)*60+(s||0);
+    const updated = { ...hyrox, raceLogs:[...(hyrox.raceLogs||[]),{...raceForm,totalSec:sec}].sort((a,b)=>a.date.localeCompare(b.date)) };
+    onUpdate({...client,hyrox:updated});
+    setRaceForm({date:"",totalTime:"",note:""});
+    setShowRaceForm(false);
+  };
+  const saveGoal = () => {
+    const [h,m,s] = goalInput.split(":").map(Number);
+    const sec = (h||0)*3600+(m||0)*60+(s||0);
+    onUpdate({...client, hyrox:{...hyrox,raceGoalSec:sec}});
+  };
+
+  const tests = hyrox.tests||[];
+  const running = tests.filter(t=>t.type==="Running");
+  const treadmill = tests.filter(t=>t.type==="Treadmill");
+  const raceLogs = hyrox.raceLogs||[];
+  const bestRace = raceLogs.length ? raceLogs.reduce((b,r)=>r.totalSec<b.totalSec?r:b) : null;
+  const raceLevel = bestRace ? getHyroxLevel(bestRace.totalSec) : null;
+  const goalSec = hyrox.raceGoalSec||0;
+
+  return (
+    <div>
+      {/* Race Goal */}
+      <Crd style={{marginBottom:14,background:"linear-gradient(135deg,#1A0A00,#161616)"}}>
+        <div style={{fontWeight:700,fontSize:14,color:D.orange,marginBottom:10}}>🏁 เป้าหมายเวลา HYROX Race</div>
+        <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}>
+          <Inp placeholder="1:30:00" value={goalInput} onChange={e=>setGoalInput(e.target.value)} style={{flex:1}}/>
+          <OBtn onClick={saveGoal} style={{width:"auto",padding:"10px 16px",flexShrink:0}}>บันทึก</OBtn>
+        </div>
+        {goalSec>0&&<div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+          {HYROX_LEVELS.map((lv,i)=>(
+            <div key={i} style={{background:goalSec<=lv.maxSec?`${lv.color}22`:"rgba(255,255,255,0.03)",border:`1px solid ${goalSec<=lv.maxSec?lv.color:D.border}`,borderRadius:10,padding:"8px 12px",textAlign:"center",flex:1,minWidth:70}}>
+              <div style={{fontSize:11,fontWeight:700,color:lv.color}}>{lv.label}</div>
+              <div style={{fontSize:10,color:D.sub,marginTop:2}}>{lv.time}</div>
+            </div>
+          ))}
+        </div>}
+      </Crd>
+
+      {/* Race Logs */}
+      <Crd style={{marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div style={{fontWeight:700,fontSize:14}}>🏆 Race Results</div>
+          <OBtn onClick={()=>setShowRaceForm(!showRaceForm)} style={{width:"auto",padding:"7px 14px",fontSize:12}}>+ บันทึก Race</OBtn>
+        </div>
+        {showRaceForm&&<div style={{background:D.card2,borderRadius:12,padding:14,marginBottom:12}}>
+          <Lbl>วันที่</Lbl><Inp type="date" value={raceForm.date} onChange={e=>setRaceForm(f=>({...f,date:e.target.value}))}/>
+          <Lbl>เวลารวม (ชม:นาที:วินาที)</Lbl><Inp placeholder="1:30:00" value={raceForm.totalTime} onChange={e=>setRaceForm(f=>({...f,totalTime:e.target.value}))}/>
+          <Lbl>หมายเหตุ</Lbl><Inp placeholder="เช่น Bangkok HYROX 2026" value={raceForm.note} onChange={e=>setRaceForm(f=>({...f,note:e.target.value}))}/>
+          <div style={{display:"flex",gap:8,marginTop:12}}><OBtn onClick={saveRace} style={{flex:2}}>💾 บันทึก</OBtn><GBtn onClick={()=>setShowRaceForm(false)} style={{flex:1}}>ยกเลิก</GBtn></div>
+        </div>}
+        {bestRace&&<div style={{background:`${raceLevel.color}15`,border:`1px solid ${raceLevel.color}40`,borderRadius:12,padding:14,marginBottom:10}}>
+          <div style={{fontSize:11,color:D.sub,marginBottom:4}}>🏅 Best Time</div>
+          <div style={{fontSize:28,fontWeight:800,color:raceLevel.color,fontFamily:"monospace"}}>{secToTime(bestRace.totalSec)}</div>
+          <div style={{fontSize:12,fontWeight:700,color:raceLevel.color,marginTop:4}}>{raceLevel.label} · {raceLevel.time}</div>
+          {goalSec>0&&<div style={{marginTop:10}}>
+            <div style={{fontSize:11,color:D.sub,marginBottom:4}}>เทียบเป้าหมาย {secToTime(goalSec)}</div>
+            <div style={{height:8,background:"#222",borderRadius:4,overflow:"hidden"}}>
+              <div style={{height:"100%",width:`${Math.min(100,(goalSec/bestRace.totalSec)*100)}%`,background:bestRace.totalSec<=goalSec?"#34d399":D.orange,borderRadius:4}}/>
+            </div>
+            <div style={{fontSize:11,marginTop:4,color:bestRace.totalSec<=goalSec?"#34d399":"#f87171"}}>
+              {bestRace.totalSec<=goalSec?`✅ ถึงเป้าแล้ว! เร็วกว่า ${secToTime(goalSec-bestRace.totalSec)}`:`⏳ เหลืออีก ${secToTime(bestRace.totalSec-goalSec)}`}
+            </div>
+          </div>}
+        </div>}
+        {raceLogs.length===0&&!showRaceForm&&<div style={{color:D.dim,fontSize:13,textAlign:"center",padding:"16px 0"}}>ยังไม่มีข้อมูล Race</div>}
+        {[...raceLogs].reverse().slice(0,5).map((r,i)=>(
+          <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:`1px solid ${D.border}`,fontSize:12}}>
+            <span style={{color:D.sub}}>{r.date}</span>
+            <span style={{color:getHyroxLevel(r.totalSec).color,fontWeight:700}}>{secToTime(r.totalSec)}</span>
+            <span style={{color:D.sub}}>{getHyroxLevel(r.totalSec).label}</span>
+          </div>
+        ))}
+      </Crd>
+
+      {/* 20-min Test */}
+      <Crd style={{marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div style={{fontWeight:700,fontSize:14}}>⏱ 20-Min Aerobic Test</div>
+          <OBtn onClick={()=>setShowTestForm(!showTestForm)} style={{width:"auto",padding:"7px 14px",fontSize:12}}>+ บันทึก Test</OBtn>
+        </div>
+        {showTestForm&&<div style={{background:D.card2,borderRadius:12,padding:14,marginBottom:12}}>
+          <Lbl>วันที่</Lbl><Inp type="date" value={testForm.date} onChange={e=>setTestForm(f=>({...f,date:e.target.value}))}/>
+          <Lbl>ประเภท</Lbl>
+          <div style={{display:"flex",gap:8,marginTop:6}}>
+            {["Running","Treadmill"].map(t=><button key={t} onClick={()=>setTestForm(f=>({...f,type:t}))} style={{flex:1,padding:"8px 0",borderRadius:10,border:`1.5px solid ${testForm.type===t?D.orange:D.border}`,cursor:"pointer",background:testForm.type===t?D.orange:"transparent",color:testForm.type===t?"#fff":D.sub,fontWeight:600,fontSize:13,fontFamily:"inherit"}}>{t==="Running"?"🏃 Running":"🏃 Treadmill"}</button>)}
+          </div>
+          <Lbl>Average Pace (นาที:วินาที เช่น 5:20)</Lbl><Inp placeholder="5:20" value={testForm.pace} onChange={e=>setTestForm(f=>({...f,pace:e.target.value}))}/>
+          <Lbl>Average HR (bpm)</Lbl><Inp type="number" placeholder="165" value={testForm.hr} onChange={e=>setTestForm(f=>({...f,hr:e.target.value}))}/>
+          <Lbl>RPE (1-10)</Lbl><Inp type="number" min="1" max="10" placeholder="7" value={testForm.rpe} onChange={e=>setTestForm(f=>({...f,rpe:e.target.value}))}/>
+          <Lbl>หมายเหตุ</Lbl><Inp placeholder="เช่น อากาศร้อน, ฟอร์มดี" value={testForm.note} onChange={e=>setTestForm(f=>({...f,note:e.target.value}))}/>
+          <div style={{display:"flex",gap:8,marginTop:12}}><OBtn onClick={saveTest} style={{flex:2}}>💾 บันทึก</OBtn><GBtn onClick={()=>setShowTestForm(false)} style={{flex:1}}>ยกเลิก</GBtn></div>
+        </div>}
+
+        {/* Running Tests */}
+        {[["Running","🏃 Running",running],["Treadmill","🏃 Treadmill",treadmill]].map(([type,label,logs])=>logs.length>0&&(
+          <div key={type} style={{marginBottom:14}}>
+            <div style={{fontWeight:700,fontSize:13,color:D.orange,marginBottom:8}}>{label}</div>
+            {(() => {
+              const analysis = logs.length>=2 ? analyzeAerobic(logs[logs.length-1], logs[logs.length-2]) : null;
+              const paceData = logs.map(l=>({date:l.date.slice(5),value:parsePace(l.pace)}));
+              const hrData = logs.map(l=>({date:l.date.slice(5),value:l.hr}));
+              return <>
+                {analysis&&<div style={{background:`${analysis.color}15`,border:`1px solid ${analysis.color}40`,borderRadius:10,padding:"10px 14px",marginBottom:10}}>
+                  <div style={{fontWeight:700,fontSize:13,color:analysis.color}}>{analysis.icon} {analysis.label}</div>
+                  <div style={{fontSize:11,color:D.sub,marginTop:3}}>{analysis.desc}</div>
+                </div>}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                  <Crd style={{padding:12}}><MiniChart data={paceData} color={D.orange} label="Pace (วินาที/km)"/></Crd>
+                  <Crd style={{padding:12}}><MiniChart data={hrData} color="#f87171" label="HR (bpm)"/></Crd>
+                </div>
+                {[...logs].reverse().slice(0,4).map((t,i)=>(
+                  <div key={i} style={{display:"flex",gap:8,padding:"7px 0",borderBottom:`1px solid ${D.border}`,fontSize:12,alignItems:"center"}}>
+                    <span style={{color:D.sub,minWidth:60}}>{t.date}</span>
+                    <span style={{color:D.orange,fontWeight:700,minWidth:50}}>{t.pace}</span>
+                    <span style={{color:"#f87171",minWidth:50}}>❤️{t.hr}</span>
+                    <span style={{color:D.sub}}>RPE {t.rpe}</span>
+                    {t.note&&<span style={{color:D.dim,fontSize:10,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.note}</span>}
+                  </div>
+                ))}
+              </>;
+            })()}
+          </div>
+        ))}
+        {tests.length===0&&!showTestForm&&<div style={{color:D.dim,fontSize:13,textAlign:"center",padding:"16px 0"}}>ยังไม่มีข้อมูล Test</div>}
+      </Crd>
+
+      {/* Threshold Table */}
+      <Crd>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>📋 Threshold Pace Reference</div>
+        <div style={{fontSize:11,color:D.sub,marginBottom:10}}>เกณฑ์มาตรฐาน Aerobic Threshold สำหรับ HYROX Training</div>
+        {THRESHOLD_TABLE.map(({level,pace,color})=>(
+          <div key={level} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:`1px solid ${D.border}`}}>
+            <div style={{width:10,height:10,borderRadius:"50%",background:color,flexShrink:0}}/>
+            <span style={{fontSize:13,fontWeight:700,color,width:100}}>{level}</span>
+            <span style={{fontSize:13,color:D.text,fontFamily:"monospace"}}>{pace}</span>
+          </div>
+        ))}
+        <div style={{fontSize:11,color:D.sub,marginTop:10,paddingTop:10,borderTop:`1px solid ${D.border}`}}>
+          ทดสอบทุก 4–8 สัปดาห์ · เปรียบเทียบ Pace + HR + RPE เพื่อวัด Aerobic Fitness
+        </div>
+      </Crd>
+    </div>
+  );
+}
+
 // ─── TARGET TAB ──────────────────────────────────────────────
 function TargetTab({ client, onUpdate }) {
   const targets = client.targets || [];
@@ -704,6 +910,9 @@ export default function App(){
           {byEx.map(({ex,logs,best,data,lvInfo})=>{ const lv=lvInfo?.level??-1,nextTgt=lvInfo&&lv<4?lvInfo.targets[lv+1]:null; return <Crd key={ex} style={{marginBottom:12}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><span style={{fontWeight:700,fontSize:15}}>{ex}</span><span style={{background:D.orangeDim,color:D.orange,padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:700}}>🏆 {best}kg</span></div>{bw&&lvInfo&&<><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><span style={{fontSize:12,fontWeight:700,color:lv>=0?LEVEL_COLORS[lv]:D.dim}}>{lv>=0?LEVELS[lv]:"Unranked"}</span><span style={{fontSize:11,color:D.sub}}>ratio {lvInfo.ratio}× BW</span></div><LvBar level={lv} max={4}/>{nextTgt&&<div style={{fontSize:11,color:D.sub,marginTop:6}}>🎯 Next: <span style={{color:LEVEL_COLORS[lv+1],fontWeight:700}}>{nextTgt}kg</span> (+{Math.max(0,nextTgt-best).toFixed(1)}kg) → {LEVELS[lv+1]}</div>}</>}<div style={{marginTop:12}}><MiniChart data={data} color={D.orange} label="น้ำหนัก (kg)"/></div><div style={{fontSize:11,color:D.sub,marginTop:6}}>ล่าสุด: {logs[logs.length-1].weight}kg × {logs[logs.length-1].reps}×{logs[logs.length-1].sets} · {logs[logs.length-1].date}</div></Crd>; })}
         </>)}
 
+        {/* ── HYROX TAB ── */}
+        {tab==="hyrox"&&<HyroxTab client={client} onUpdate={next=>updClient(client.id,next)}/>}
+
         {/* ── CARDIO TAB ── */}
         {tab==="cardio"&&(<>
           {addMode==="cardio"?(<Crd style={{marginBottom:16}}><div style={{fontWeight:700,fontSize:14,marginBottom:12,color:"#34d399"}}>🫀 บันทึกความฟิต</div><Lbl>วันที่</Lbl><Inp type="date" value={form.date||""} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/><Lbl>ประเภท</Lbl><Sel value={form.cardioType||""} onChange={e=>setForm(f=>({...f,cardioType:e.target.value}))}><option value="">เลือก...</option>{CARDIO_TYPES.map(t=><option key={t}>{t}</option>)}</Sel><Lbl>ผลลัพธ์</Lbl><Inp type="number" value={form.value||""} onChange={e=>setForm(f=>({...f,value:e.target.value}))}/><div style={{display:"flex",gap:8,marginTop:16}}><OBtn onClick={saveCardio} style={{flex:2}}>💾 บันทึก</OBtn><GBtn onClick={()=>setAddMode(null)} style={{flex:1}}>ยกเลิก</GBtn></div></Crd>):<OBtn onClick={()=>{setForm({date:new Date().toISOString().slice(0,10)});setAddMode("cardio");}} style={{marginBottom:16,background:"linear-gradient(135deg,#059669,#047857)"}}>+ บันทึกความฟิต</OBtn>}
@@ -750,7 +959,7 @@ export default function App(){
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <VectorLogo size={40}/>
-            <div><div style={{fontSize:20,fontWeight:800,letterSpacing:"-0.02em",lineHeight:1}}>VECTOR</div><div style={{fontSize:10,color:D.orange,letterSpacing:"0.16em",textTransform:"uppercase",fontWeight:700}}>Fitness Studio</div></div>
+            <div><div style={{fontSize:20,fontWeight:800,letterSpacing:"-0.02em",lineHeight:1}}>VECTOR</div><div style={{fontSize:10,color:D.orange,letterSpacing:"0.16em",textTransform:"uppercase",fontWeight:700}}>Fitness Studio</div><div style={{fontSize:10,color:D.sub,marginTop:2}}>Personal Trainer CTAM</div></div>
           </div>
           <button onClick={()=>setShowAddClient(true)} style={{background:`linear-gradient(135deg,${D.orange},#EA580C)`,color:"#fff",border:"none",borderRadius:12,padding:"9px 16px",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(249,115,22,0.4)",display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:18,lineHeight:1}}>+</span> เพิ่มลูกค้า</button>
         </div>
