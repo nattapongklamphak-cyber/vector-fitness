@@ -242,19 +242,19 @@ function Screen({title,sub,onBack,children}){
   );
 }
 
-function PhotoSection({photos=[],onAdd,onDelete}){
+function PhotoSection({photos=[],onAdd,onDelete,isAdmin=false}){
   const ref=useRef(); const [lbl,setLbl]=useState("before"); const [note,setNote]=useState("");
   const handle=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{onAdd({id:Date.now(),src:ev.target.result,label:lbl,note,date:new Date().toISOString().slice(0,10)});setNote("");};r.readAsDataURL(f);e.target.value="";};
   const bef=photos.filter(p=>p.label==="before"),aft=photos.filter(p=>p.label==="after");
   return (
     <div>
-      <Crd style={{marginBottom:16}}>
+      {isAdmin&&<Crd style={{marginBottom:16}}>
         <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>📸 อัปโหลดรูปภาพ</div>
         <div style={{display:"flex",gap:8,marginBottom:12}}>{["before","after"].map(l=><button key={l} onClick={()=>setLbl(l)} style={{flex:1,padding:"8px 0",borderRadius:10,border:`1.5px solid ${lbl===l?D.orange:D.border}`,cursor:"pointer",background:lbl===l?D.orange:"transparent",color:lbl===l?"#fff":D.sub,fontWeight:700,fontSize:13,fontFamily:"inherit"}}>{l==="before"?"Before":"After"}</button>)}</div>
         <Inp placeholder="หมายเหตุ" value={note} onChange={e=>setNote(e.target.value)} style={{marginBottom:12}}/>
         <input ref={ref} type="file" accept="image/*" onChange={handle} style={{display:"none"}}/>
         <OBtn onClick={()=>ref.current.click()}>+ เลือกรูปภาพ</OBtn>
-      </Crd>
+      </Crd>}
       {(bef.length>0||aft.length>0)&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         {[["before","Before 📷",bef,"#F97316"],["after","After ✨",aft,"#34d399"]].map(([key,title,list,col])=>(
           <div key={key}>
@@ -264,7 +264,7 @@ function PhotoSection({photos=[],onAdd,onDelete}){
               <div key={p.id} style={{position:"relative",borderRadius:12,overflow:"hidden",border:`1.5px solid ${col}40`,marginBottom:8}}>
                 <img src={p.src} alt="" style={{width:"100%",display:"block"}}/>
                 <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,rgba(0,0,0,0.7))",padding:"20px 8px 8px"}}><div style={{fontSize:10,color:"#aaa"}}>{p.date}</div>{p.note&&<div style={{fontSize:11,color:"#fff",fontWeight:600}}>{p.note}</div>}</div>
-                <button onClick={()=>onDelete(p.id)} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.7)",border:"none",color:"#f87171",borderRadius:"50%",width:24,height:24,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                {isAdmin&&<button onClick={()=>onDelete(p.id)} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.7)",border:"none",color:"#f87171",borderRadius:"50%",width:24,height:24,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>}
               </div>
             ))}
           </div>
@@ -316,7 +316,7 @@ function analyzeAerobic(curr, prev) {
   return { icon:"➡️", label:"No Change", color:"#888", desc:"ยังไม่มีการเปลี่ยนแปลงที่ชัดเจน" };
 }
 
-function HyroxTab({ client, onUpdate }) {
+function HyroxTab({ client, onUpdate, isAdmin=false }) {
   const hyrox = client.hyrox || { tests:[], raceGoalSec:"", raceLogs:[] };
   const [showTestForm, setShowTestForm] = useState(false);
   const [showRaceForm, setShowRaceForm] = useState(false);
@@ -360,8 +360,8 @@ function HyroxTab({ client, onUpdate }) {
       <Crd style={{marginBottom:14,background:"linear-gradient(135deg,#1A0A00,#161616)"}}>
         <div style={{fontWeight:700,fontSize:14,color:D.orange,marginBottom:10}}>🏁 เป้าหมายเวลา HYROX Race</div>
         <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}>
-          <Inp placeholder="1:30:00" value={goalInput} onChange={e=>setGoalInput(e.target.value)} style={{flex:1}}/>
-          <OBtn onClick={saveGoal} style={{width:"auto",padding:"10px 16px",flexShrink:0}}>บันทึก</OBtn>
+          <Inp placeholder="1:30:00" value={goalInput} onChange={isAdmin?e=>setGoalInput(e.target.value):undefined} readOnly={!isAdmin} style={{flex:1}}/>
+          {isAdmin&&<OBtn onClick={saveGoal} style={{width:"auto",padding:"10px 16px",flexShrink:0}}>บันทึก</OBtn>}
         </div>
         {goalSec>0&&<div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
           {HYROX_LEVELS.map((lv,i)=>(
@@ -377,7 +377,7 @@ function HyroxTab({ client, onUpdate }) {
       <Crd style={{marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
           <div style={{fontWeight:700,fontSize:14}}>🏆 Race Results</div>
-          <OBtn onClick={()=>setShowRaceForm(!showRaceForm)} style={{width:"auto",padding:"7px 14px",fontSize:12}}>+ บันทึก Race</OBtn>
+          {isAdmin&&<OBtn onClick={()=>setShowRaceForm(!showRaceForm)} style={{width:"auto",padding:"7px 14px",fontSize:12}}>+ บันทึก Race</OBtn>}
         </div>
         {showRaceForm&&<div style={{background:D.card2,borderRadius:12,padding:14,marginBottom:12}}>
           <Lbl>วันที่</Lbl><Inp type="date" value={raceForm.date} onChange={e=>setRaceForm(f=>({...f,date:e.target.value}))}/>
@@ -413,7 +413,7 @@ function HyroxTab({ client, onUpdate }) {
       <Crd style={{marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
           <div style={{fontWeight:700,fontSize:14}}>⏱ 20-Min Aerobic Test</div>
-          <OBtn onClick={()=>setShowTestForm(!showTestForm)} style={{width:"auto",padding:"7px 14px",fontSize:12}}>+ บันทึก Test</OBtn>
+          {isAdmin&&<OBtn onClick={()=>setShowTestForm(!showTestForm)} style={{width:"auto",padding:"7px 14px",fontSize:12}}>+ บันทึก Test</OBtn>}
         </div>
         {showTestForm&&<div style={{background:D.card2,borderRadius:12,padding:14,marginBottom:12}}>
           <Lbl>วันที่</Lbl><Inp type="date" value={testForm.date} onChange={e=>setTestForm(f=>({...f,date:e.target.value}))}/>
@@ -481,7 +481,7 @@ function HyroxTab({ client, onUpdate }) {
 }
 
 // ─── TARGET TAB ──────────────────────────────────────────────
-function TargetTab({ client, onUpdate }) {
+function TargetTab({ client, onUpdate, isAdmin=false }) {
   const targets = client.targets || [];
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ type:"strength", exercise:"Bench Press", value:"", deadline:"", note:"" });
@@ -507,7 +507,7 @@ function TargetTab({ client, onUpdate }) {
   return (
     <div>
       {/* Add target form */}
-      {showForm ? (
+      {isAdmin && (showForm ? (
         <Crd style={{marginBottom:16,border:`1px solid ${D.orange}40`}}>
           <div style={{fontWeight:700,fontSize:14,marginBottom:14,color:D.orange}}>🎯 ตั้งเป้าหมายใหม่</div>
           <Lbl>ประเภทเป้าหมาย</Lbl>
@@ -533,7 +533,7 @@ function TargetTab({ client, onUpdate }) {
         </Crd>
       ) : (
         <OBtn onClick={()=>setShowForm(true)} style={{marginBottom:16}}>+ ตั้งเป้าหมายใหม่</OBtn>
-      )}
+      ))}
 
       {targets.length === 0 && !showForm && (
         <div style={{textAlign:"center",color:D.dim,padding:"40px 0",fontSize:14}}>
@@ -558,7 +558,7 @@ function TargetTab({ client, onUpdate }) {
               </div>
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
                 {prog.done && <span style={{fontSize:18}}>✅</span>}
-                <button onClick={()=>delTarget(t.id)} style={{background:"transparent",border:"none",color:D.dim,cursor:"pointer",fontSize:16,padding:0}}>×</button>
+                {isAdmin&&<button onClick={()=>delTarget(t.id)} style={{background:"transparent",border:"none",color:D.dim,cursor:"pointer",fontSize:16,padding:0}}>×</button>}
               </div>
             </div>
 
@@ -856,7 +856,7 @@ function mkClient(id, idx, name, gender, age){
 }
 function avatarGrad(id){ const hues=[16,24,28,32,20,18,12,36,22,26,14,30,10,34]; const h=hues[(id-1)%hues.length]; return `linear-gradient(135deg,hsl(${h},90%,45%),hsl(${h+15},80%,35%))`; }
 
-export default function App(){
+export default function App({ isAdmin=false }){
   const [clients,setClients]=useState(null);
   const [view,setView]=useState("dashboard");
   const [selId,setSelId]=useState(null);
@@ -930,11 +930,11 @@ export default function App(){
     const burpeeLv=bestBurpee?getBurpeeLevel(bestBurpee,client.gender||"male",client.age||25):null;
     const byEx=EXERCISES.map(ex=>{ const logs=client.strengthLogs.filter(l=>l.exercise===ex);if(!logs.length)return null;const best=Math.max(...logs.map(l=>l.weight));return{ex,logs,best,data:logs.map(l=>({date:l.date.slice(5),value:l.weight})),lvInfo:bw?getLevel(ex,client.gender||"male",bw,client.age||25,best):null}; }).filter(Boolean);
     const TABS=[["score","🏆 คะแนน"],["target","🎯 เป้าหมาย"],["report","📋 รายงาน"],["hyrox","🏁 HYROX"],["strength","💪 แข็งแรง"],["cardio","🫀 ฟิต"],["body","📊 ร่างกาย"],["photos","📸 รูป"],["program","📝 โปรแกรม"]];
-    const nameEl=editName?<input autoFocus value={client.name} style={{...inp,fontSize:16,padding:"4px 8px",width:"auto",maxWidth:180}} onChange={e=>upd(client.id,c=>({...c,name:e.target.value}))} onBlur={()=>setEditName(false)} onKeyDown={e=>e.key==="Enter"&&setEditName(false)}/>:<span onClick={()=>setEditName(true)} style={{cursor:"pointer",borderBottom:`1px dashed ${D.border}`}}>{client.name} <span style={{fontSize:13,color:D.dim}}>✏️</span></span>;
+    const nameEl=isAdmin&&editName?<input autoFocus value={client.name} style={{...inp,fontSize:16,padding:"4px 8px",width:"auto",maxWidth:180}} onChange={e=>upd(client.id,c=>({...c,name:e.target.value}))} onBlur={()=>setEditName(false)} onKeyDown={e=>e.key==="Enter"&&setEditName(false)}/>:<span onClick={isAdmin?()=>setEditName(true):undefined} style={{cursor:isAdmin?"pointer":"default",borderBottom:isAdmin?`1px dashed ${D.border}`:"none"}}>{client.name}{isAdmin&&<span style={{fontSize:13,color:D.dim}}> ✏️</span>}</span>;
 
     return (
       <Screen title={nameEl} sub={`${client.gender==="female"?"♀":"♂"} ${client.age||"?"}ปี`} onBack={()=>{setView("dashboard");setAddMode(null);}}>
-        {confirmDel===client.id&&(
+        {isAdmin&&confirmDel===client.id&&(
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
             <Crd style={{maxWidth:320,width:"100%",textAlign:"center"}}><div style={{fontSize:32,marginBottom:12}}>🗑️</div><div style={{fontWeight:700,fontSize:16,marginBottom:8}}>ลบ {client.name}?</div><div style={{fontSize:13,color:D.sub,marginBottom:20}}>ข้อมูลทั้งหมดจะถูกลบถาวร</div><div style={{display:"flex",gap:10}}><GBtn onClick={()=>setConfirmDel(null)} style={{flex:1}}>ยกเลิก</GBtn><OBtn onClick={()=>delClient(client.id)} style={{flex:1,background:"#DC2626",boxShadow:"none"}}>ลบเลย</OBtn></div></Crd>
           </div>
@@ -946,12 +946,12 @@ export default function App(){
             <div style={{width:54,height:54,borderRadius:14,background:avatarGrad(client.id),display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:800,color:"#fff",flexShrink:0,boxShadow:"0 4px 14px rgba(249,115,22,0.4)"}}>{client.name.slice(-1)}</div>
             <div style={{flex:1}}>
               <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
-                {["male","female"].map(g=><button key={g} onClick={()=>upd(client.id,c=>({...c,gender:g}))} style={{padding:"3px 12px",borderRadius:20,border:`1.5px solid ${client.gender===g?D.orange:D.border}`,cursor:"pointer",background:client.gender===g?D.orange:"transparent",color:client.gender===g?"#fff":D.sub,fontWeight:600,fontSize:11,fontFamily:"inherit"}}>{g==="male"?"♂ ชาย":"♀ หญิง"}</button>)}
-                <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{fontSize:11,color:D.sub}}>อายุ</span><Inp type="number" value={client.age||""} onChange={e=>upd(client.id,c=>({...c,age:+e.target.value}))} style={{width:52,padding:"3px 8px",fontSize:12}}/><span style={{fontSize:11,color:D.sub}}>ปี</span></div>
+                {["male","female"].map(g=><button key={g} onClick={isAdmin?()=>upd(client.id,c=>({...c,gender:g})):undefined} style={{padding:"3px 12px",borderRadius:20,border:`1.5px solid ${client.gender===g?D.orange:D.border}`,cursor:isAdmin?"pointer":"default",background:client.gender===g?D.orange:"transparent",color:client.gender===g?"#fff":D.sub,fontWeight:600,fontSize:11,fontFamily:"inherit"}}>{g==="male"?"♂ ชาย":"♀ หญิง"}</button>)}
+                <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{fontSize:11,color:D.sub}}>อายุ</span><Inp type="number" value={client.age||""} onChange={isAdmin?e=>upd(client.id,c=>({...c,age:+e.target.value})):undefined} readOnly={!isAdmin} style={{width:52,padding:"3px 8px",fontSize:12}}/><span style={{fontSize:11,color:D.sub}}>ปี</span></div>
               </div>
-              <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{GOALS_LIST.map(g=>{ const sel=(client.goals||[]).includes(g); return <button key={g} onClick={()=>upd(client.id,c=>{ const cur=c.goals||[];if(cur.includes(g))return{...c,goals:cur.filter(x=>x!==g)};if(cur.length>=2)return{...c,goals:[cur[1],g]};return{...c,goals:[...cur,g]}; })} style={{padding:"2px 8px",borderRadius:20,border:`1.5px solid ${sel?D.orange:D.border}`,cursor:"pointer",background:sel?D.orangeDim:"transparent",color:sel?D.orange:D.sub,fontSize:10,fontWeight:sel?700:400,fontFamily:"inherit"}}>{g}</button>; })}</div>
+              <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{GOALS_LIST.map(g=>{ const sel=(client.goals||[]).includes(g); return <button key={g} onClick={isAdmin?()=>upd(client.id,c=>{ const cur=c.goals||[];if(cur.includes(g))return{...c,goals:cur.filter(x=>x!==g)};if(cur.length>=2)return{...c,goals:[cur[1],g]};return{...c,goals:[...cur,g]}; }):undefined} style={{padding:"2px 8px",borderRadius:20,border:`1.5px solid ${sel?D.orange:D.border}`,cursor:isAdmin?"pointer":"default",background:sel?D.orangeDim:"transparent",color:sel?D.orange:D.sub,fontSize:10,fontWeight:sel?700:400,fontFamily:"inherit"}}>{g}</button>; })}</div>
             </div>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}><Ring pts={sc.total} size={68}/><button onClick={()=>setConfirmDel(client.id)} style={{background:"transparent",border:"none",color:D.dim,cursor:"pointer",fontSize:11,padding:0}}>🗑️ ลบ</button></div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}><Ring pts={sc.total} size={68}/>{isAdmin&&<button onClick={()=>setConfirmDel(client.id)} style={{background:"transparent",border:"none",color:D.dim,cursor:"pointer",fontSize:11,padding:0}}>🗑️ ลบ</button>}</div>
           </div>
           <div style={{marginTop:14,padding:"10px 14px",background:"rgba(0,0,0,0.3)",borderRadius:12,display:"flex",alignItems:"center",gap:10}}>
             <span style={{fontSize:18}}>{rnk.icon}</span>
@@ -968,7 +968,7 @@ export default function App(){
         </div>
 
         {/* ── TARGET TAB ── */}
-        {tab==="target"&&<TargetTab client={client} onUpdate={next=>updClient(client.id,next)}/>}
+        {tab==="target"&&<TargetTab client={client} onUpdate={next=>updClient(client.id,next)} isAdmin={isAdmin}/>}
 
         {/* ── REPORT TAB ── */}
         {tab==="report"&&<ReportTab client={client}/>}
@@ -995,18 +995,18 @@ export default function App(){
 
         {/* ── STRENGTH TAB ── */}
         {tab==="strength"&&(<>
-          {addMode==="strength"?(<Crd style={{marginBottom:16}}><div style={{fontWeight:700,fontSize:14,marginBottom:12,color:D.orange}}>บันทึกความแข็งแรง</div><Lbl>วันที่</Lbl><Inp type="date" value={form.date||""} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/><Lbl>ท่า</Lbl><Sel value={form.exercise||""} onChange={e=>setForm(f=>({...f,exercise:e.target.value}))}><option value="">เลือกท่า...</option>{EXERCISES.map(ex=><option key={ex}>{ex}</option>)}</Sel><Lbl>น้ำหนัก (kg)</Lbl><Inp type="number" value={form.weight||""} onChange={e=>setForm(f=>({...f,weight:e.target.value}))}/><div style={{display:"flex",gap:8}}><div style={{flex:1}}><Lbl>Reps</Lbl><Inp type="number" value={form.reps||""} onChange={e=>setForm(f=>({...f,reps:e.target.value}))}/></div><div style={{flex:1}}><Lbl>Sets</Lbl><Inp type="number" value={form.sets||""} onChange={e=>setForm(f=>({...f,sets:e.target.value}))}/></div></div><div style={{display:"flex",gap:8,marginTop:16}}><OBtn onClick={saveStrength} style={{flex:2}}>💾 บันทึก</OBtn><GBtn onClick={()=>setAddMode(null)} style={{flex:1}}>ยกเลิก</GBtn></div></Crd>):<OBtn onClick={()=>{setForm({date:new Date().toISOString().slice(0,10)});setAddMode("strength");}} style={{marginBottom:16}}>+ บันทึกความแข็งแรง</OBtn>}
+          {isAdmin&&(addMode==="strength"?(<Crd style={{marginBottom:16}}><div style={{fontWeight:700,fontSize:14,marginBottom:12,color:D.orange}}>บันทึกความแข็งแรง</div><Lbl>วันที่</Lbl><Inp type="date" value={form.date||""} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/><Lbl>ท่า</Lbl><Sel value={form.exercise||""} onChange={e=>setForm(f=>({...f,exercise:e.target.value}))}><option value="">เลือกท่า...</option>{EXERCISES.map(ex=><option key={ex}>{ex}</option>)}</Sel><Lbl>น้ำหนัก (kg)</Lbl><Inp type="number" value={form.weight||""} onChange={e=>setForm(f=>({...f,weight:e.target.value}))}/><div style={{display:"flex",gap:8}}><div style={{flex:1}}><Lbl>Reps</Lbl><Inp type="number" value={form.reps||""} onChange={e=>setForm(f=>({...f,reps:e.target.value}))}/></div><div style={{flex:1}}><Lbl>Sets</Lbl><Inp type="number" value={form.sets||""} onChange={e=>setForm(f=>({...f,sets:e.target.value}))}/></div></div><div style={{display:"flex",gap:8,marginTop:16}}><OBtn onClick={saveStrength} style={{flex:2}}>💾 บันทึก</OBtn><GBtn onClick={()=>setAddMode(null)} style={{flex:1}}>ยกเลิก</GBtn></div></Crd>):<OBtn onClick={()=>{setForm({date:new Date().toISOString().slice(0,10)});setAddMode("strength");}} style={{marginBottom:16}}>+ บันทึกความแข็งแรง</OBtn>)}
           {!bw&&<div style={{color:"#FCA974",fontSize:12,marginBottom:12}}>⚠️ บันทึกน้ำหนักในแท็บ ร่างกาย ก่อน</div>}
           {byEx.length===0&&!addMode&&<div style={{textAlign:"center",color:D.dim,padding:"40px 0",fontSize:14}}>ยังไม่มีข้อมูล</div>}
           {byEx.map(({ex,logs,best,data,lvInfo})=>{ const lv=lvInfo?.level??-1,nextTgt=lvInfo&&lv<4?lvInfo.targets[lv+1]:null; return <Crd key={ex} style={{marginBottom:12}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><span style={{fontWeight:700,fontSize:15}}>{ex}</span><span style={{background:D.orangeDim,color:D.orange,padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:700}}>🏆 {best}kg</span></div>{bw&&lvInfo&&<><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><span style={{fontSize:12,fontWeight:700,color:lv>=0?LEVEL_COLORS[lv]:D.dim}}>{lv>=0?LEVELS[lv]:"Unranked"}</span><span style={{fontSize:11,color:D.sub}}>ratio {lvInfo.ratio}× BW</span></div><LvBar level={lv} max={4}/>{nextTgt&&<div style={{fontSize:11,color:D.sub,marginTop:6}}>🎯 Next: <span style={{color:LEVEL_COLORS[lv+1],fontWeight:700}}>{nextTgt}kg</span> (+{Math.max(0,nextTgt-best).toFixed(1)}kg) → {LEVELS[lv+1]}</div>}</>}<div style={{marginTop:12}}><MiniChart data={data} color={D.orange} label="น้ำหนัก (kg)"/></div><div style={{fontSize:11,color:D.sub,marginTop:6}}>ล่าสุด: {logs[logs.length-1].weight}kg × {logs[logs.length-1].reps}×{logs[logs.length-1].sets} · {logs[logs.length-1].date}</div></Crd>; })}
         </>)}
 
         {/* ── HYROX TAB ── */}
-        {tab==="hyrox"&&<HyroxTab client={client} onUpdate={next=>updClient(client.id,next)}/>}
+        {tab==="hyrox"&&<HyroxTab client={client} onUpdate={next=>updClient(client.id,next)} isAdmin={isAdmin}/>}
 
         {/* ── CARDIO TAB ── */}
         {tab==="cardio"&&(<>
-          {addMode==="cardio"?(<Crd style={{marginBottom:16}}><div style={{fontWeight:700,fontSize:14,marginBottom:12,color:"#34d399"}}>🫀 บันทึกความฟิต</div><Lbl>วันที่</Lbl><Inp type="date" value={form.date||""} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/><Lbl>ประเภท</Lbl><Sel value={form.cardioType||""} onChange={e=>setForm(f=>({...f,cardioType:e.target.value}))}><option value="">เลือก...</option>{CARDIO_TYPES.map(t=><option key={t}>{t}</option>)}</Sel><Lbl>ผลลัพธ์</Lbl><Inp type="number" value={form.value||""} onChange={e=>setForm(f=>({...f,value:e.target.value}))}/><div style={{display:"flex",gap:8,marginTop:16}}><OBtn onClick={saveCardio} style={{flex:2}}>💾 บันทึก</OBtn><GBtn onClick={()=>setAddMode(null)} style={{flex:1}}>ยกเลิก</GBtn></div></Crd>):<OBtn onClick={()=>{setForm({date:new Date().toISOString().slice(0,10)});setAddMode("cardio");}} style={{marginBottom:16,background:"linear-gradient(135deg,#059669,#047857)"}}>+ บันทึกความฟิต</OBtn>}
+          {isAdmin&&(addMode==="cardio"?(<Crd style={{marginBottom:16}}><div style={{fontWeight:700,fontSize:14,marginBottom:12,color:"#34d399"}}>🫀 บันทึกความฟิต</div><Lbl>วันที่</Lbl><Inp type="date" value={form.date||""} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/><Lbl>ประเภท</Lbl><Sel value={form.cardioType||""} onChange={e=>setForm(f=>({...f,cardioType:e.target.value}))}><option value="">เลือก...</option>{CARDIO_TYPES.map(t=><option key={t}>{t}</option>)}</Sel><Lbl>ผลลัพธ์</Lbl><Inp type="number" value={form.value||""} onChange={e=>setForm(f=>({...f,value:e.target.value}))}/><div style={{display:"flex",gap:8,marginTop:16}}><OBtn onClick={saveCardio} style={{flex:2}}>💾 บันทึก</OBtn><GBtn onClick={()=>setAddMode(null)} style={{flex:1}}>ยกเลิก</GBtn></div></Crd>):<OBtn onClick={()=>{setForm({date:new Date().toISOString().slice(0,10)});setAddMode("cardio");}} style={{marginBottom:16,background:"linear-gradient(135deg,#059669,#047857)"}}>+ บันทึกความฟิต</OBtn>)}
           {bestBurpee!==null&&<Crd style={{marginBottom:12,background:"linear-gradient(135deg,#052E16,#161616)"}}><div style={{fontWeight:700,fontSize:14,color:"#34d399",marginBottom:8}}>🫀 Burpees 3 นาที</div><div style={{display:"flex",alignItems:"center",gap:14}}><div style={{textAlign:"center"}}><div style={{fontSize:32,fontWeight:800,color:"#34d399",fontFamily:"monospace"}}>{bestBurpee}</div><div style={{fontSize:11,color:"#6EE7B7"}}>ครั้ง (Best)</div></div><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:burpeeLv?.level>=0?LEVEL_COLORS[burpeeLv.level]:D.dim,marginBottom:4}}>{burpeeLv?.level>=0?["Beginner","Novice","Intermediate","Advanced"][burpeeLv.level]:"Unranked"}</div><LvBar level={burpeeLv?.level??-1} max={3}/>{burpeeLv?.nextTarget&&<div style={{fontSize:11,color:"#34d399",marginTop:5}}>🎯 Next: {burpeeLv.nextTarget} ครั้ง</div>}</div></div><div style={{marginTop:12}}><MiniChart data={bLogs.map(l=>({date:l.date.slice(5),value:l.value}))} color="#34d399" label="Burpees (ครั้ง)"/></div></Crd>}
           {(client.cardioLogs||[]).length===0&&!addMode&&<div style={{textAlign:"center",color:D.dim,padding:"40px 0",fontSize:14}}>ยังไม่มีข้อมูลความฟิต</div>}
         </>)}
@@ -1016,13 +1016,13 @@ export default function App(){
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
             {[{lbl:"น้ำหนัก",key:"weight",unit:"kg",lb:true},{lbl:"ไขมัน",key:"fat",unit:"%",lb:true},{lbl:"กล้ามเนื้อ",key:"muscle",unit:"%",lb:false}].map(({lbl,key,unit,lb})=>{ const cur=latBs?.[key],prev=fstBs?.[key],delta=cur!==undefined&&prev!==undefined&&latBs!==fstBs?+(cur-prev).toFixed(1):null; return <Crd key={key} style={{textAlign:"center",padding:"14px 8px",background:D.card2}}><div style={{fontSize:10,color:D.sub,fontWeight:700,textTransform:"uppercase",marginBottom:4,letterSpacing:"0.06em"}}>{lbl}</div><div style={{fontSize:20,fontWeight:800,color:key==="weight"?D.orange:key==="fat"?"#60a5fa":"#34d399",fontFamily:"monospace"}}>{cur??<span style={{color:D.dim}}>—</span>}<span style={{fontSize:10,color:D.sub}}>{unit}</span></div>{delta!==null&&<div style={{fontSize:10,marginTop:2,color:((lb&&delta<0)||(!lb&&delta>0))?"#34d399":"#f87171"}}>{delta>0?"+":""}{delta}{unit}</div>}</Crd>; })}
           </div>
-          {addMode==="body"?(<Crd style={{marginBottom:16}}><div style={{fontWeight:700,fontSize:14,marginBottom:12,color:D.orange}}>บันทึกข้อมูลร่างกาย</div><Lbl>วันที่</Lbl><Inp type="date" value={form.date||""} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/><Lbl>น้ำหนัก (kg)</Lbl><Inp type="number" value={form.weight||""} onChange={e=>setForm(f=>({...f,weight:e.target.value}))}/><Lbl>ไขมัน (%)</Lbl><Inp type="number" value={form.fat||""} onChange={e=>setForm(f=>({...f,fat:e.target.value}))}/><Lbl>กล้ามเนื้อ (%)</Lbl><Inp type="number" value={form.muscle||""} onChange={e=>setForm(f=>({...f,muscle:e.target.value}))}/><div style={{display:"flex",gap:8,marginTop:16}}><OBtn onClick={saveBody} style={{flex:2}}>💾 บันทึก</OBtn><GBtn onClick={()=>setAddMode(null)} style={{flex:1}}>ยกเลิก</GBtn></div></Crd>):<OBtn onClick={()=>{setForm({date:new Date().toISOString().slice(0,10)});setAddMode("body");}} style={{marginBottom:16}}>+ บันทึกข้อมูลร่างกาย</OBtn>}
+          {isAdmin&&(addMode==="body"?(<Crd style={{marginBottom:16}}><div style={{fontWeight:700,fontSize:14,marginBottom:12,color:D.orange}}>บันทึกข้อมูลร่างกาย</div><Lbl>วันที่</Lbl><Inp type="date" value={form.date||""} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/><Lbl>น้ำหนัก (kg)</Lbl><Inp type="number" value={form.weight||""} onChange={e=>setForm(f=>({...f,weight:e.target.value}))}/><Lbl>ไขมัน (%)</Lbl><Inp type="number" value={form.fat||""} onChange={e=>setForm(f=>({...f,fat:e.target.value}))}/><Lbl>กล้ามเนื้อ (%)</Lbl><Inp type="number" value={form.muscle||""} onChange={e=>setForm(f=>({...f,muscle:e.target.value}))}/><div style={{display:"flex",gap:8,marginTop:16}}><OBtn onClick={saveBody} style={{flex:2}}>💾 บันทึก</OBtn><GBtn onClick={()=>setAddMode(null)} style={{flex:1}}>ยกเลิก</GBtn></div></Crd>):<OBtn onClick={()=>{setForm({date:new Date().toISOString().slice(0,10)});setAddMode("body");}} style={{marginBottom:16}}>+ บันทึกข้อมูลร่างกาย</OBtn>)}
           {bs.length>=2&&<><Crd style={{marginBottom:12}}><MiniChart data={wData} color={D.orange} label="น้ำหนัก (kg)"/></Crd><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}><Crd><MiniChart data={fData} color="#60a5fa" label="ไขมัน (%)"/></Crd><Crd><MiniChart data={mData} color="#34d399" label="กล้ามเนื้อ (%)"/></Crd></div></>}
           {bs.length>0&&<Crd><div style={{fontSize:11,fontWeight:700,color:D.sub,marginBottom:10,letterSpacing:"0.06em",textTransform:"uppercase"}}>ประวัติ</div>{[...bs].reverse().slice(0,8).map((s,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:`1px solid ${D.border}`,fontSize:12}}><span style={{color:D.sub}}>{s.date}</span><span style={{color:D.orange,fontWeight:600}}>{s.weight}kg</span><span style={{color:"#60a5fa"}}>{s.fat}%🔥</span><span style={{color:"#34d399"}}>{s.muscle}%💪</span></div>)}</Crd>}
         </>)}
 
-        {tab==="photos"&&<PhotoSection photos={client.photos||[]} onAdd={p=>upd(client.id,c=>({...c,photos:[...(c.photos||[]),p]}))} onDelete={id=>upd(client.id,c=>({...c,photos:(c.photos||[]).filter(p=>p.id!==id)}))}/>}
-        {tab==="program"&&<Crd><div style={{fontWeight:700,fontSize:14,marginBottom:10}}>📝 โปรแกรมการฝึก</div><textarea value={client.program||""} onChange={e=>upd(client.id,c=>({...c,program:e.target.value}))} placeholder={"วันจันทร์: Chest + Triceps\n- Bench Press 4×8\n\nวันพุธ: Back + Biceps"} style={{width:"100%",minHeight:240,background:"#111",border:`1.5px solid ${D.border}`,borderRadius:10,padding:14,color:D.text,fontSize:13,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",lineHeight:1.8,outline:"none"}}/><div style={{fontSize:11,color:D.sub,marginTop:6}}>บันทึกอัตโนมัติ</div></Crd>}
+        {tab==="photos"&&<PhotoSection photos={client.photos||[]} onAdd={p=>upd(client.id,c=>({...c,photos:[...(c.photos||[]),p]}))} onDelete={id=>upd(client.id,c=>({...c,photos:(c.photos||[]).filter(p=>p.id!==id)}))} isAdmin={isAdmin}/>}
+        {tab==="program"&&<Crd><div style={{fontWeight:700,fontSize:14,marginBottom:10}}>📝 โปรแกรมการฝึก</div><textarea value={client.program||""} onChange={isAdmin?e=>upd(client.id,c=>({...c,program:e.target.value})):undefined} readOnly={!isAdmin} placeholder={"วันจันทร์: Chest + Triceps\n- Bench Press 4×8\n\nวันพุธ: Back + Biceps"} style={{width:"100%",minHeight:240,background:"#111",border:`1.5px solid ${D.border}`,borderRadius:10,padding:14,color:D.text,fontSize:13,fontFamily:"inherit",resize:isAdmin?"vertical":"none",boxSizing:"border-box",lineHeight:1.8,outline:"none"}}/><div style={{fontSize:11,color:D.sub,marginTop:6}}>{isAdmin?"บันทึกอัตโนมัติ":"ดูได้อย่างเดียว"}</div></Crd>}
       </Screen>
     );
   }
@@ -1033,7 +1033,7 @@ export default function App(){
       <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 
       {/* Add Client Modal */}
-      {showAddClient&&(
+      {isAdmin&&showAddClient&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
           <Crd style={{maxWidth:340,width:"100%"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}><VectorLogo size={28}/><div style={{fontWeight:800,fontSize:16}}>เพิ่มลูกค้าใหม่</div></div>
@@ -1052,7 +1052,7 @@ export default function App(){
             <VectorLogo size={40}/>
             <div><div style={{fontSize:20,fontWeight:800,letterSpacing:"-0.02em",lineHeight:1}}>VECTOR</div><div style={{fontSize:10,color:D.orange,letterSpacing:"0.16em",textTransform:"uppercase",fontWeight:700}}>Fitness Studio</div><div style={{fontSize:10,color:D.sub,marginTop:2}}>Personal Trainer CTAM</div></div>
           </div>
-          <button onClick={()=>setShowAddClient(true)} style={{background:`linear-gradient(135deg,${D.orange},#EA580C)`,color:"#fff",border:"none",borderRadius:12,padding:"9px 16px",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(249,115,22,0.4)",display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:18,lineHeight:1}}>+</span> เพิ่มลูกค้า</button>
+          {isAdmin&&<button onClick={()=>setShowAddClient(true)} style={{background:`linear-gradient(135deg,${D.orange},#EA580C)`,color:"#fff",border:"none",borderRadius:12,padding:"9px 16px",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(249,115,22,0.4)",display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:18,lineHeight:1}}>+</span> เพิ่มลูกค้า</button>}
         </div>
         <div style={{height:2,background:`linear-gradient(90deg,${D.orange},transparent)`,borderRadius:2,marginBottom:18}}/>
         <div style={{display:"flex",gap:8,marginBottom:18,overflowX:"auto",paddingBottom:2}}>
@@ -1110,10 +1110,10 @@ export default function App(){
             </div>
           );
         })}
-        <div onClick={()=>setShowAddClient(true)} style={{background:"transparent",border:`1.5px dashed ${D.border}`,borderRadius:16,padding:14,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,minHeight:180,transition:"all 0.15s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=D.orange;e.currentTarget.style.background=D.orangeDim;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=D.border;e.currentTarget.style.background="transparent";}}>
+        {isAdmin&&<div onClick={()=>setShowAddClient(true)} style={{background:"transparent",border:`1.5px dashed ${D.border}`,borderRadius:16,padding:14,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,minHeight:180,transition:"all 0.15s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=D.orange;e.currentTarget.style.background=D.orangeDim;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=D.border;e.currentTarget.style.background="transparent";}}>
           <div style={{width:40,height:40,borderRadius:12,background:D.card2,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,color:D.orange}}>+</div>
           <div style={{fontSize:12,color:D.sub,fontWeight:600,textAlign:"center"}}>เพิ่มลูกค้าใหม่</div>
-        </div>
+        </div>}
       </div>
 
       {toast&&<div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:D.orange,color:"#fff",padding:"11px 24px",borderRadius:100,fontWeight:700,fontSize:14,zIndex:999,boxShadow:"0 4px 20px rgba(249,115,22,0.5)",whiteSpace:"nowrap"}}>{toast}</div>}

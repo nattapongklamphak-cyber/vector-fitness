@@ -2,8 +2,7 @@ import { useState, useEffect } from "react";
 import { auth } from "./firebase";
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 
-// Admin UID — จะถูก set หลัง login ครั้งแรก
-const ADMIN_EMAIL = "nattapongklamphak@g"; // prefix เท่านั้น ไม่ต้องใส่เต็ม
+const ADMIN_EMAIL = "nattapongklamphak@gmail.com";
 
 function LoginScreen({ onLogin, error, loading }) {
   const [email, setEmail] = useState("");
@@ -106,6 +105,7 @@ export default function App() {
   if (!user) return <LoginScreen onLogin={handleLogin} error={error} loading={loading}/>;
 
   // Logged in — show dashboard with logout button
+  const isAdmin = user?.email === ADMIN_EMAIL;
   const Dashboard = require("./trainer-dashboard").default;
   return (
     <div>
@@ -117,7 +117,7 @@ export default function App() {
           fontFamily:"sans-serif",backdropFilter:"blur(8px)"
         }}>ออกจากระบบ</button>
       </div>
-      <Dashboard/>
+      <Dashboard isAdmin={isAdmin}/>
     </div>
   );
 }
