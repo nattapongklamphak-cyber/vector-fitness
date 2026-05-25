@@ -929,7 +929,7 @@ export default function App(){
     const bestBurpee=bLogs.length?Math.max(...bLogs.map(l=>l.value)):null;
     const burpeeLv=bestBurpee?getBurpeeLevel(bestBurpee,client.gender||"male",client.age||25):null;
     const byEx=EXERCISES.map(ex=>{ const logs=client.strengthLogs.filter(l=>l.exercise===ex);if(!logs.length)return null;const best=Math.max(...logs.map(l=>l.weight));return{ex,logs,best,data:logs.map(l=>({date:l.date.slice(5),value:l.weight})),lvInfo:bw?getLevel(ex,client.gender||"male",bw,client.age||25,best):null}; }).filter(Boolean);
-    const TABS=[["score","🏆 คะแนน"],["target","🎯 เป้าหมาย"],["report","📋 รายงาน"],["strength","💪 แข็งแรง"],["cardio","🫀 ฟิต"],["body","📊 ร่างกาย"],["photos","📸 รูป"],["program","📝 โปรแกรม"]];
+    const TABS=[["score","🏆 คะแนน"],["target","🎯 เป้าหมาย"],["report","📋 รายงาน"],["hyrox","🏁 HYROX"],["strength","💪 แข็งแรง"],["cardio","🫀 ฟิต"],["body","📊 ร่างกาย"],["photos","📸 รูป"],["program","📝 โปรแกรม"]];
     const nameEl=editName?<input autoFocus value={client.name} style={{...inp,fontSize:16,padding:"4px 8px",width:"auto",maxWidth:180}} onChange={e=>upd(client.id,c=>({...c,name:e.target.value}))} onBlur={()=>setEditName(false)} onKeyDown={e=>e.key==="Enter"&&setEditName(false)}/>:<span onClick={()=>setEditName(true)} style={{cursor:"pointer",borderBottom:`1px dashed ${D.border}`}}>{client.name} <span style={{fontSize:13,color:D.dim}}>✏️</span></span>;
 
     return (
