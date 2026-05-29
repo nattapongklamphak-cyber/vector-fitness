@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { db } from "./firebase";
-import { collection, doc, setDoc, deleteDoc, onSnapshot } from "firebase/firestore";
+import { collection, doc, setDoc, deleteDoc, onSnapshot, addDoc, query, where, getDocs } from "firebase/firestore";
 
 // ─── Firebase sync helpers ────────────────────────────────────
 async function fbSave(client) {
@@ -11,6 +11,22 @@ async function fbSave(client) {
 }
 async function fbDelete(id) {
   try { await deleteDoc(doc(db, "clients", String(id))); } catch(e) {}
+}
+async function fbBackup(clientId, snapshot) {
+  try {
+    const clean = JSON.parse(JSON.stringify(snapshot));
+    await addDoc(collection(db, "backups"), {
+      clientId: String(clientId),
+      timestamp: new Date().toISOString(),
+      snapshot: clean,
+    });
+    const q = query(collection(db,"backups"), where("clientId","==",String(clientId)));
+    const snap = await getDocs(q);
+    if (snap.docs.length > 10) {
+      const sorted = snap.docs.slice().sort((a,b)=>a.data().timestamp.localeCompare(b.data().timestamp));
+      for (const d of sorted.slice(0, sorted.length - 10)) await deleteDoc(d.ref);
+    }
+  } catch(e) { console.error("fbBackup error", e); }
 }
 
 // ─── STRENGTH STANDARDS ───────────────────────────────────────
@@ -844,6 +860,88 @@ function ReportTab({ client }) {
   );
 }
 
+// ─── BACKUP MODAL ────────────────────────────────────────────
+function BackupModal({ clientId, onClose, onRestore }) {
+  const [backups, setBackups] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [restoring, setRestoring] = useState(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const q = query(collection(db,"backups"), where("clientId","==",String(clientId)));
+        const snap = await getDocs(q);
+        const sorted = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .sort((a,b) => b.timestamp.localeCompare(a.timestamp))
+          .slice(0, 10);
+        setBackups(sorted);
+      } catch(e) { console.error("load backups error", e); }
+      setLoading(false);
+    };
+    load();
+  }, [clientId]);
+
+  const handleRestore = async (backup) => {
+    setRestoring(backup.id);
+    await onRestore(backup.snapshot);
+    setRestoring(null);
+    onClose();
+  };
+
+  const fmtTime = (iso) => {
+    const d = new Date(iso);
+    return d.toLocaleString("th-TH", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" });
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{background:D.card,border:`1px solid ${D.border}`,borderRadius:20,padding:24,width:"100%",maxWidth:420,maxHeight:"80vh",display:"flex",flexDirection:"column",gap:0}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+          <div style={{fontWeight:800,fontSize:16}}>🔄 ประวัติ Backup</div>
+          <button onClick={onClose} style={{background:D.card2,border:`1px solid ${D.border}`,color:D.sub,cursor:"pointer",fontSize:18,width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+        </div>
+        <div style={{overflowY:"auto",flex:1}}>
+          {loading && <div style={{textAlign:"center",color:D.sub,padding:"24px 0",fontSize:13}}>กำลังโหลด...</div>}
+          {!loading && backups.length === 0 && (
+            <div style={{textAlign:"center",color:D.dim,padding:"32px 0",fontSize:13}}>
+              <div style={{fontSize:32,marginBottom:10}}>🗂️</div>
+              ยังไม่มี Backup สำหรับลูกค้านี้
+            </div>
+          )}
+          {!loading && backups.map((b, i) => (
+            <div key={b.id} style={{background:D.card2,border:`1px solid ${D.border}`,borderRadius:12,padding:"12px 14px",marginBottom:10}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,fontWeight:700,color:D.text,marginBottom:3}}>
+                    {i === 0 ? <span style={{background:D.orangeDim,color:D.orange,padding:"1px 6px",borderRadius:6,fontSize:10,fontWeight:700,marginRight:6}}>ล่าสุด</span> : null}
+                    {fmtTime(b.timestamp)}
+                  </div>
+                  <div style={{fontSize:11,color:D.sub}}>
+                    ร่างกาย {(b.snapshot?.bodyStats||[]).length} รายการ ·
+                    ความแข็งแรง {(b.snapshot?.strengthLogs||[]).length} รายการ ·
+                    ฟิต {(b.snapshot?.cardioLogs||[]).length} รายการ
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleRestore(b)}
+                  disabled={restoring === b.id}
+                  style={{background:`linear-gradient(135deg,${D.orange},#EA580C)`,color:"#fff",border:"none",borderRadius:10,padding:"7px 14px",fontWeight:700,fontSize:12,cursor:restoring===b.id?"not-allowed":"pointer",fontFamily:"inherit",opacity:restoring===b.id?0.6:1,flexShrink:0}}
+                >
+                  {restoring === b.id ? "กำลังกู้คืน..." : "กู้คืน"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{marginTop:16}}>
+          <button onClick={onClose} style={{background:"transparent",color:D.orange,border:`1.5px solid ${D.border}`,borderRadius:12,padding:"10px 20px",fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:"inherit",width:"100%"}}>ปิด</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ═════════════════════════════════════════════════════════════
 // MAIN APP
 // ═════════════════════════════════════════════════════════════
@@ -869,6 +967,7 @@ export default function App({ isAdmin=false }){
   const [showAddClient,setShowAddClient]=useState(false);
   const [newCF,setNewCF]=useState({name:"",gender:"male",age:""});
   const [confirmDel,setConfirmDel]=useState(null);
+  const [showBackup,setShowBackup]=useState(false);
 
   // ── Load from Firestore on mount ──
   useEffect(()=>{
@@ -893,7 +992,11 @@ export default function App({ isAdmin=false }){
 
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
   const upd=(id,fn)=>setClients(cs=>cs.map(c=>c.id===id?fn({...c}):c));
-  const updClient=(id,next)=>setClients(cs=>cs.map(c=>c.id===id?{...next}:c));
+  const updClient=(id,next)=>{
+    const prev=clients?.find(c=>c.id===id);
+    if(prev) fbBackup(id,prev);
+    setClients(cs=>cs.map(c=>c.id===id?{...next}:c));
+  };
   const client=clients?.find(c=>c.id===selId);
 
   if(!clients) return (
@@ -909,12 +1012,12 @@ export default function App({ isAdmin=false }){
 
   const addClient=()=>{ if(!newCF.name.trim())return; const id=nextId++; const nc=mkClient(id,id-1,newCF.name,newCF.gender,+newCF.age||25); setClients(cs=>[...cs,nc]); setNewCF({name:"",gender:"male",age:""}); setShowAddClient(false); showToast(`✓ เพิ่ม ${newCF.name}`); };
   const delClient=id=>{ fbDelete(id); setClients(cs=>cs.filter(c=>c.id!==id)); if(view==="client")setView("dashboard"); setConfirmDel(null); showToast("✓ ลบแล้ว"); };
-  const saveBody=()=>{ if(!form.date||!form.weight)return; upd(selId,c=>({...c,bodyStats:[...c.bodyStats,{date:form.date,weight:+form.weight,fat:+form.fat||0,muscle:+form.muscle||0}].sort((a,b)=>a.date.localeCompare(b.date))})); setForm({});setAddMode(null);showToast("✓ บันทึกข้อมูลร่างกาย"); };
-  const saveStrength=()=>{ if(!form.date||!form.exercise||!form.weight)return; upd(selId,c=>({...c,strengthLogs:[...c.strengthLogs,{date:form.date,exercise:form.exercise,weight:+form.weight,reps:+form.reps||1,sets:+form.sets||1}].sort((a,b)=>a.date.localeCompare(b.date))})); setForm({});setAddMode(null);showToast("✓ บันทึกความแข็งแรง"); };
-  const saveCardio=()=>{ if(!form.date||!form.cardioType||!form.value)return; upd(selId,c=>({...c,cardioLogs:[...(c.cardioLogs||[]),{date:form.date,type:form.cardioType,value:+form.value}].sort((a,b)=>a.date.localeCompare(b.date))})); setForm({});setAddMode(null);showToast("✓ บันทึกความฟิต"); };
-  const deleteBodyStat=(idx)=>{ upd(selId,c=>({...c,bodyStats:c.bodyStats.filter((_,i)=>i!==idx)})); showToast("✓ ลบข้อมูลร่างกาย"); };
-  const deleteStrengthLog=(idx)=>{ upd(selId,c=>({...c,strengthLogs:c.strengthLogs.filter((_,i)=>i!==idx)})); showToast("✓ ลบบันทึกความแข็งแรง"); };
-  const deleteCardioLog=(idx)=>{ upd(selId,c=>({...c,cardioLogs:(c.cardioLogs||[]).filter((_,i)=>i!==idx)})); showToast("✓ ลบบันทึกความฟิต"); };
+  const saveBody=()=>{ if(!form.date||!form.weight)return; if(client) fbBackup(selId,client); upd(selId,c=>({...c,bodyStats:[...c.bodyStats,{date:form.date,weight:+form.weight,fat:+form.fat||0,muscle:+form.muscle||0}].sort((a,b)=>a.date.localeCompare(b.date))})); setForm({});setAddMode(null);showToast("✓ บันทึกข้อมูลร่างกาย"); };
+  const saveStrength=()=>{ if(!form.date||!form.exercise||!form.weight)return; if(client) fbBackup(selId,client); upd(selId,c=>({...c,strengthLogs:[...c.strengthLogs,{date:form.date,exercise:form.exercise,weight:+form.weight,reps:+form.reps||1,sets:+form.sets||1}].sort((a,b)=>a.date.localeCompare(b.date))})); setForm({});setAddMode(null);showToast("✓ บันทึกความแข็งแรง"); };
+  const saveCardio=()=>{ if(!form.date||!form.cardioType||!form.value)return; if(client) fbBackup(selId,client); upd(selId,c=>({...c,cardioLogs:[...(c.cardioLogs||[]),{date:form.date,type:form.cardioType,value:+form.value}].sort((a,b)=>a.date.localeCompare(b.date))})); setForm({});setAddMode(null);showToast("✓ บันทึกความฟิต"); };
+  const deleteBodyStat=(idx)=>{ if(client) fbBackup(selId,client); upd(selId,c=>({...c,bodyStats:c.bodyStats.filter((_,i)=>i!==idx)})); showToast("✓ ลบข้อมูลร่างกาย"); };
+  const deleteStrengthLog=(idx)=>{ if(client) fbBackup(selId,client); upd(selId,c=>({...c,strengthLogs:c.strengthLogs.filter((_,i)=>i!==idx)})); showToast("✓ ลบบันทึกความแข็งแรง"); };
+  const deleteCardioLog=(idx)=>{ if(client) fbBackup(selId,client); upd(selId,c=>({...c,cardioLogs:(c.cardioLogs||[]).filter((_,i)=>i!==idx)})); showToast("✓ ลบบันทึกความฟิต"); };
 
   const filtered=clients.filter(c=>c.name.toLowerCase().includes(search.toLowerCase()));
   const leaderboard=[...clients].map(c=>({...c,...calcScores(c)})).sort((a,b)=>b.total-a.total);
@@ -948,6 +1051,16 @@ export default function App({ isAdmin=false }){
             <Crd style={{maxWidth:320,width:"100%",textAlign:"center"}}><div style={{fontSize:32,marginBottom:12}}>🗑️</div><div style={{fontWeight:700,fontSize:16,marginBottom:8}}>ลบ {client.name}?</div><div style={{fontSize:13,color:D.sub,marginBottom:20}}>ข้อมูลทั้งหมดจะถูกลบถาวร</div><div style={{display:"flex",gap:10}}><GBtn onClick={()=>setConfirmDel(null)} style={{flex:1}}>ยกเลิก</GBtn><OBtn onClick={()=>delClient(client.id)} style={{flex:1,background:"#DC2626",boxShadow:"none"}}>ลบเลย</OBtn></div></Crd>
           </div>
         )}
+        {isAdmin&&showBackup&&(
+          <BackupModal
+            clientId={client.id}
+            onClose={()=>setShowBackup(false)}
+            onRestore={async (snapshot)=>{
+              updClient(client.id, {...snapshot, id:client.id});
+              showToast("✓ กู้คืนข้อมูลสำเร็จ");
+            }}
+          />
+        )}
 
         {/* Profile card */}
         <Crd style={{marginBottom:16,background:"linear-gradient(135deg,#1A1208,#161616)"}}>
@@ -960,7 +1073,7 @@ export default function App({ isAdmin=false }){
               </div>
               <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{GOALS_LIST.map(g=>{ const sel=(client.goals||[]).includes(g); return <button key={g} onClick={isAdmin?()=>upd(client.id,c=>{ const cur=c.goals||[];if(cur.includes(g))return{...c,goals:cur.filter(x=>x!==g)};if(cur.length>=2)return{...c,goals:[cur[1],g]};return{...c,goals:[...cur,g]}; }):undefined} style={{padding:"2px 8px",borderRadius:20,border:`1.5px solid ${sel?D.orange:D.border}`,cursor:isAdmin?"pointer":"default",background:sel?D.orangeDim:"transparent",color:sel?D.orange:D.sub,fontSize:10,fontWeight:sel?700:400,fontFamily:"inherit"}}>{g}</button>; })}</div>
             </div>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}><Ring pts={sc.total} size={68}/>{isAdmin&&<button onClick={()=>setConfirmDel(client.id)} style={{background:"transparent",border:"none",color:D.dim,cursor:"pointer",fontSize:11,padding:0}}>🗑️ ลบ</button>}</div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}><Ring pts={sc.total} size={68}/>{isAdmin&&<div style={{display:"flex",gap:8}}><button onClick={()=>setConfirmDel(client.id)} style={{background:"transparent",border:"none",color:D.dim,cursor:"pointer",fontSize:11,padding:0}}>🗑️ ลบ</button><button onClick={()=>setShowBackup(true)} style={{background:"transparent",border:`1px solid ${D.border}`,color:D.orange,cursor:"pointer",fontSize:10,padding:"2px 7px",borderRadius:8,fontFamily:"inherit",fontWeight:600}}>🔄 กู้คืน</button></div>}</div>
           </div>
           <div style={{marginTop:14,padding:"10px 14px",background:"rgba(0,0,0,0.3)",borderRadius:12,display:"flex",alignItems:"center",gap:10}}>
             <span style={{fontSize:18}}>{rnk.icon}</span>
