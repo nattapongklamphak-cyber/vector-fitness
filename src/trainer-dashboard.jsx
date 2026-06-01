@@ -142,15 +142,17 @@ function buildReport(client, period) {
 }
 
 // ─── Target system ────────────────────────────────────────────
-// target shape: { id, type:"weight"|"fat"|"muscle"|"strength"|"burpee", exercise?, value, deadline, note }
+// target shape: { id, type:"weight"|"fat"|"muscle"|"strength"|"burpee"|"fatPercent"|"musclePercent", exercise?, value, deadline, note }
 function calcTargetProgress(target, client) {
   const bw = client.bodyStats.length ? client.bodyStats[client.bodyStats.length-1].weight : null;
   const latBs = client.bodyStats[client.bodyStats.length-1];
   const fstBs = client.bodyStats[0];
   let current = null, start = null;
-  if (target.type === "weight")    { current = latBs?.weight; start = fstBs?.weight; }
-  if (target.type === "fat")       { current = latBs?.fat;    start = fstBs?.fat; }
-  if (target.type === "muscle")    { current = latBs?.muscle; start = fstBs?.muscle; }
+  if (target.type === "weight")       { current = latBs?.weight; start = fstBs?.weight; }
+  if (target.type === "fat")          { current = latBs?.fat;    start = fstBs?.fat; }
+  if (target.type === "muscle")       { current = latBs?.muscle; start = fstBs?.muscle; }
+  if (target.type === "fatPercent")   { current = latBs?.fat;    start = fstBs?.fat; }
+  if (target.type === "musclePercent"){ current = latBs?.muscle; start = fstBs?.muscle; }
   if (target.type === "strength" && target.exercise) {
     const logs = client.strengthLogs.filter(l=>l.exercise===target.exercise);
     current = logs.length ? Math.max(...logs.map(l=>l.weight)) : 0;
@@ -163,8 +165,8 @@ function calcTargetProgress(target, client) {
   }
   if (current === null || current === undefined) return { pct:0, current:null, done:false };
   const goal = +target.value;
-  // For weight/fat: lower is better; for others: higher is better
-  const lowerBetter = target.type==="weight"||target.type==="fat";
+  // For weight/fat/fatPercent: lower is better; for others: higher is better
+  const lowerBetter = target.type==="weight"||target.type==="fat"||target.type==="fatPercent";
   let pct = 0;
   if (lowerBetter) {
     if (start && start !== goal) pct = Math.min(100, Math.max(0, ((start-current)/(start-goal))*100));
@@ -503,11 +505,13 @@ function TargetTab({ client, onUpdate, isAdmin=false }) {
   const [form, setForm] = useState({ type:"strength", exercise:"Bench Press", value:"", deadline:"", note:"" });
 
   const TARGET_TYPES = [
-    { value:"strength", label:"💪 น้ำหนักที่ยก (PR)" },
-    { value:"weight",   label:"⚖️ น้ำหนักตัว (kg)" },
-    { value:"fat",      label:"🔥 ไขมัน (%)" },
-    { value:"muscle",   label:"💚 กล้ามเนื้อ (%)" },
-    { value:"burpee",   label:"🫀 Burpees 3 นาที" },
+    { value:"strength",      label:"💪 น้ำหนักที่ยก (PR)" },
+    { value:"weight",        label:"⚖️ น้ำหนักตัว (kg)" },
+    { value:"fat",           label:"🔥 ไขมัน (%)" },
+    { value:"muscle",        label:"💚 กล้ามเนื้อ (%)" },
+    { value:"fatPercent",    label:"📉 เป้าหมายไขมัน % (ลดเหลือ)" },
+    { value:"musclePercent", label:"📈 เป้าหมายกล้ามเนื้อ % (เพิ่มเป็น)" },
+    { value:"burpee",        label:"🫀 Burpees 3 นาที" },
   ];
 
   const addTarget = () => {
@@ -561,8 +565,8 @@ function TargetTab({ client, onUpdate, isAdmin=false }) {
 
       {targets.map(t => {
         const prog = calcTargetProgress(t, client);
-        const typeLabel = { strength:`💪 ${t.exercise}`, weight:"⚖️ น้ำหนักตัว", fat:"🔥 ไขมัน", muscle:"💚 กล้ามเนื้อ", burpee:"🫀 Burpees" }[t.type]||t.type;
-        const unitLabel = { strength:"kg", weight:"kg", fat:"%", muscle:"%", burpee:"ครั้ง" }[t.type]||"";
+        const typeLabel = { strength:`💪 ${t.exercise}`, weight:"⚖️ น้ำหนักตัว", fat:"🔥 ไขมัน", muscle:"💚 กล้ามเนื้อ", fatPercent:"📉 ไขมัน % ลดเหลือ", musclePercent:"📈 กล้ามเนื้อ % เพิ่มเป็น", burpee:"🫀 Burpees" }[t.type]||t.type;
+        const unitLabel = { strength:"kg", weight:"kg", fat:"%", muscle:"%", fatPercent:"%", musclePercent:"%", burpee:"ครั้ง" }[t.type]||"";
         const barColor = prog.done ? "#34d399" : prog.pct>60 ? D.orange : prog.pct>30 ? "#f59e0b" : "#60a5fa";
 
         return (
@@ -816,7 +820,7 @@ function ReportTab({ client }) {
               <div style={{fontWeight:700,fontSize:14,marginBottom:14}}>🎯 เป้าหมาย (สถานะปัจจุบัน)</div>
               {(client.targets||[]).map(t=>{
                 const prog=calcTargetProgress(t,client);
-                const typeLabel={strength:`💪 ${t.exercise}`,weight:"⚖️ น้ำหนัก",fat:"🔥 ไขมัน",muscle:"💚 กล้ามเนื้อ",burpee:"🫀 Burpees"}[t.type]||t.type;
+                const typeLabel={strength:`💪 ${t.exercise}`,weight:"⚖️ น้ำหนัก",fat:"🔥 ไขมัน",muscle:"💚 กล้ามเนื้อ",fatPercent:"📉 ไขมัน % ลดเหลือ",musclePercent:"📈 กล้ามเนื้อ % เพิ่มเป็น",burpee:"🫀 Burpees"}[t.type]||t.type;
                 const barColor=prog.done?"#34d399":prog.pct>60?D.orange:"#60a5fa";
                 return (
                   <div key={t.id} style={{marginBottom:12}}>
