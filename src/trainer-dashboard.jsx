@@ -619,6 +619,135 @@ function TargetTab({ client, onUpdate, isAdmin=false }) {
   );
 }
 
+// ─── SESSION TAB ─────────────────────────────────────────────
+function SessionTab({ client, onUpdate, isAdmin=false }) {
+  const sessions = client.sessions || { bought:0, logs:[] };
+  const bought = sessions.bought || 0;
+  const logs = sessions.logs || [];
+  const used = logs.length;
+  const remaining = Math.max(0, bought - used);
+  const lowSession = bought > 0 && remaining < 3;
+
+  const [showForm, setShowForm] = useState(false);
+  const [editBought, setEditBought] = useState(false);
+  const [boughtInput, setBoughtInput] = useState(String(bought));
+  const [form, setForm] = useState({ date: new Date().toISOString().slice(0,10), note:"" });
+
+  const saveBought = () => {
+    const n = parseInt(boughtInput) || 0;
+    onUpdate({ ...client, sessions: { ...sessions, bought: n } });
+    setEditBought(false);
+  };
+
+  const addLog = () => {
+    if (!form.date) return;
+    const newLog = { id: Date.now(), date: form.date, note: form.note };
+    const newLogs = [...logs, newLog].sort((a,b)=>a.date.localeCompare(b.date));
+    onUpdate({ ...client, sessions: { ...sessions, logs: newLogs } });
+    setForm({ date: new Date().toISOString().slice(0,10), note:"" });
+    setShowForm(false);
+  };
+
+  const delLog = (id) => onUpdate({ ...client, sessions: { ...sessions, logs: logs.filter(l=>l.id!==id) } });
+
+  const pct = bought > 0 ? Math.min(100, (used/bought)*100) : 0;
+  const barColor = remaining < 3 ? "#f87171" : remaining < 6 ? D.orange : "#34d399";
+
+  return (
+    <div>
+      {lowSession && (
+        <div style={{background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.4)",borderRadius:12,padding:"10px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:20}}>⚠️</span>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:"#f87171"}}>Session เหลือน้อย!</div>
+            <div style={{fontSize:11,color:D.sub}}>เหลือเพียง {remaining} Session — แนะนำให้ต่อ Package</div>
+          </div>
+        </div>
+      )}
+
+      <Crd style={{marginBottom:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <div style={{fontWeight:700,fontSize:14}}>📅 สรุป Session</div>
+          {isAdmin && !editBought && (
+            <GBtn onClick={()=>{setBoughtInput(String(bought));setEditBought(true);}} style={{padding:"4px 12px",fontSize:11}}>แก้ไข Package</GBtn>
+          )}
+        </div>
+        {editBought ? (
+          <div>
+            <Lbl>จำนวน Session ที่ซื้อ</Lbl>
+            <Inp type="number" min="0" value={boughtInput} onChange={e=>setBoughtInput(e.target.value)}/>
+            <div style={{display:"flex",gap:8,marginTop:12}}>
+              <OBtn onClick={saveBought} style={{flex:2}}>✓ บันทึก</OBtn>
+              <GBtn onClick={()=>setEditBought(false)} style={{flex:1}}>ยกเลิก</GBtn>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div style={{display:"flex",marginBottom:14}}>
+              {[{label:"ซื้อมา",val:bought,color:"#60a5fa"},{label:"ใช้ไปแล้ว",val:used,color:D.orange},{label:"คงเหลือ",val:remaining,color:barColor}].map(({label,val,color})=>(
+                <div key={label} style={{flex:1,textAlign:"center"}}>
+                  <div style={{fontSize:28,fontWeight:800,color,fontFamily:"monospace"}}>{val}</div>
+                  <div style={{fontSize:10,color:D.sub,marginTop:2}}>{label}</div>
+                </div>
+              ))}
+            </div>
+            {bought > 0 ? (
+              <>
+                <div style={{height:10,background:"#222",borderRadius:5,overflow:"hidden",marginBottom:6}}>
+                  <div style={{height:"100%",width:`${pct}%`,background:barColor,borderRadius:5,transition:"width 0.5s"}}/>
+                </div>
+                <div style={{fontSize:11,color:D.sub,textAlign:"center"}}>ใช้ไป {used}/{bought} Session ({Math.round(pct)}%)</div>
+              </>
+            ) : (
+              <div style={{fontSize:12,color:D.dim,textAlign:"center",padding:"6px 0"}}>ยังไม่ได้ตั้งค่า Package {isAdmin&&"— กด \"แก้ไข Package\" เพื่อเพิ่ม"}</div>
+            )}
+          </>
+        )}
+      </Crd>
+
+      {isAdmin && (showForm ? (
+        <Crd style={{marginBottom:16,border:`1px solid ${D.orange}40`}}>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:14,color:D.orange}}>📝 บันทึกการใช้ Session</div>
+          <Lbl>วันที่</Lbl>
+          <Inp type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/>
+          <Lbl>หมายเหตุ</Lbl>
+          <Inp placeholder="เช่น ฟอร์มดีขึ้น, เข่าซ้ายมีปัญหา" value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))}/>
+          <div style={{display:"flex",gap:8,marginTop:16}}>
+            <OBtn onClick={addLog} style={{flex:2}}>✓ บันทึก</OBtn>
+            <GBtn onClick={()=>setShowForm(false)} style={{flex:1}}>ยกเลิก</GBtn>
+          </div>
+        </Crd>
+      ) : (
+        <OBtn onClick={()=>setShowForm(true)} style={{marginBottom:16}}>+ บันทึกการใช้ Session</OBtn>
+      ))}
+
+      {logs.length === 0 && !showForm && (
+        <div style={{textAlign:"center",color:D.dim,padding:"32px 0",fontSize:14}}>
+          <div style={{fontSize:32,marginBottom:8}}>📅</div>
+          ยังไม่มีประวัติ Session
+        </div>
+      )}
+      {logs.length > 0 && (
+        <Crd>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>ประวัติการใช้ Session ({used} ครั้ง)</div>
+          {[...logs].reverse().map((log, i) => (
+            <div key={log.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${D.border}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:28,height:28,borderRadius:8,background:D.orangeDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:D.orange,flexShrink:0}}>{used - i}</div>
+                <div>
+                  <div style={{fontSize:12,fontWeight:600}}>{log.date}</div>
+                  {log.note && <div style={{fontSize:11,color:D.sub,marginTop:1}}>{log.note}</div>}
+                </div>
+              </div>
+              {isAdmin && <button onClick={()=>delLog(log.id)} style={{background:"transparent",border:"none",color:D.dim,cursor:"pointer",fontSize:18,padding:"0 4px",lineHeight:1}}>×</button>}
+            </div>
+          ))}
+        </Crd>
+      )}
+    </div>
+  );
+}
+
 // ─── REPORT TAB ──────────────────────────────────────────────
 function ReportTab({ client }) {
   const periods = getBimonthlyPeriods(client.startDate);
@@ -954,7 +1083,7 @@ function mkClient(id, idx, name, gender, age){
   return { id, name:name||`ลูกค้า ${id}`, gender:gender||(idx%2===0?"male":"female"), age:age||(22+idx),
     goals:[["ลดน้ำหนัก","เพิ่มกล้ามเนื้อ","เพิ่มความแข็งแรง"][idx%3]],
     startDate:new Date().toISOString().slice(0,10),
-    bodyStats:[], strengthLogs:[], cardioLogs:[], photos:[], program:"", targets:[] };
+    bodyStats:[], strengthLogs:[], cardioLogs:[], photos:[], program:"", targets:[], sessions:{bought:0,logs:[]} };
 }
 function avatarGrad(id){ const hues=[16,24,28,32,20,18,12,36,22,26,14,30,10,34]; const h=hues[(id-1)%hues.length]; return `linear-gradient(135deg,hsl(${h},90%,45%),hsl(${h+15},80%,35%))`; }
 
@@ -980,7 +1109,7 @@ export default function App({ isAdmin=false }){
         const init = Array.from({length:14},(_,i)=>mkClient(i+1,i));
         for(const c of init) await fbSave(c);
       } else {
-        const data = snap.docs.map(d=>({targets:[],photos:[],cardioLogs:[],strengthLogs:[],bodyStats:[],program:"",...d.data()})).sort((a,b)=>a.id-b.id);
+        const data = snap.docs.map(d=>({targets:[],photos:[],cardioLogs:[],strengthLogs:[],bodyStats:[],program:"",sessions:{bought:0,logs:[]},...d.data()})).sort((a,b)=>a.id-b.id);
         nextId = Math.max(...data.map(c=>c.id))+1;
         setClients(data);
       }
@@ -1045,7 +1174,9 @@ export default function App({ isAdmin=false }){
     const runLogs=(client.cardioLogs||[]).filter(l=>l.type==="วิ่ง 1.6km (วินาที)");
     const bestRun=runLogs.length?Math.min(...runLogs.map(l=>l.value)):null;
     const byEx=EXERCISES.map(ex=>{ const logs=client.strengthLogs.filter(l=>l.exercise===ex);if(!logs.length)return null;const best=Math.max(...logs.map(l=>l.weight));return{ex,logs,best,data:logs.map(l=>({date:l.date.slice(5),value:l.weight})),lvInfo:bw?getLevel(ex,client.gender||"male",bw,client.age||25,best):null}; }).filter(Boolean);
-    const TABS=[["score","🏆 คะแนน"],["target","🎯 เป้าหมาย"],["report","📋 รายงาน"],["hyrox","🏁 HYROX"],["strength","💪 แข็งแรง"],["cardio","🫀 ฟิต"],["body","📊 ร่างกาย"],["photos","📸 รูป"],["program","📝 โปรแกรม"]];
+    const sessions = client.sessions || { bought:0, logs:[] };
+    const sessionRemaining = Math.max(0, (sessions.bought||0) - (sessions.logs||[]).length);
+    const TABS=[["score","🏆 คะแนน"],["target","🎯 เป้าหมาย"],["session",`📅 Session${(sessions.bought||0)>0&&sessionRemaining<3?" 🔴":""}`],["report","📋 รายงาน"],["hyrox","🏁 HYROX"],["strength","💪 แข็งแรง"],["cardio","🫀 ฟิต"],["body","📊 ร่างกาย"],["photos","📸 รูป"],["program","📝 โปรแกรม"]];
     const nameEl=isAdmin&&editName?<input autoFocus value={client.name} style={{...inp,fontSize:16,padding:"4px 8px",width:"auto",maxWidth:180}} onChange={e=>upd(client.id,c=>({...c,name:e.target.value}))} onBlur={()=>setEditName(false)} onKeyDown={e=>e.key==="Enter"&&setEditName(false)}/>:<span onClick={isAdmin?()=>setEditName(true):undefined} style={{cursor:isAdmin?"pointer":"default",borderBottom:isAdmin?`1px dashed ${D.border}`:"none"}}>{client.name}{isAdmin&&<span style={{fontSize:13,color:D.dim}}> ✏️</span>}</span>;
 
     return (
@@ -1095,6 +1226,9 @@ export default function App({ isAdmin=false }){
 
         {/* ── TARGET TAB ── */}
         {tab==="target"&&<TargetTab client={client} onUpdate={next=>updClient(client.id,next)} isAdmin={isAdmin}/>}
+
+        {/* ── SESSION TAB ── */}
+        {tab==="session"&&<SessionTab client={client} onUpdate={next=>updClient(client.id,next)} isAdmin={isAdmin}/>}
 
         {/* ── REPORT TAB ── */}
         {tab==="report"&&<ReportTab client={client}/>}
@@ -1204,6 +1338,44 @@ export default function App({ isAdmin=false }){
           ); })}
         </div>
       </div>
+
+      {/* ── ALERTS ── */}
+      {(()=>{
+        const today = new Date();
+        const alerts = clients.map(c=>{
+          const allDates = [...(c.bodyStats||[]).map(s=>s.date),...(c.strengthLogs||[]).map(l=>l.date),...(c.cardioLogs||[]).map(l=>l.date)];
+          const lastDate = allDates.length ? allDates.slice().sort().slice(-1)[0] : null;
+          const daysSince = lastDate ? Math.floor((today - new Date(lastDate))/(1000*60*60*24)) : null;
+          const startDays = c.startDate ? Math.floor((today - new Date(c.startDate))/(1000*60*60*24)) : 0;
+          const inactive = (daysSince !== null && daysSince > 14) || (allDates.length === 0 && startDays > 14);
+          const sess = c.sessions || { bought:0, logs:[] };
+          const sessRemaining = Math.max(0, (sess.bought||0) - (sess.logs||[]).length);
+          const lowSession = (sess.bought||0) > 0 && sessRemaining < 3;
+          if (!inactive && !lowSession) return null;
+          return { c, inactive, daysSince, lowSession, sessRemaining };
+        }).filter(Boolean);
+        if (!alerts.length) return null;
+        return (
+          <div style={{padding:"12px 18px 0"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#f87171",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>⚠️ แจ้งเตือน ({alerts.length})</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:12}}>
+              {alerts.map(({c,inactive,daysSince,lowSession,sessRemaining})=>(
+                <div key={c.id} onClick={()=>{setSelId(c.id);setView("client");setTab(lowSession&&!inactive?"session":"score");}} style={{background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:12,padding:"10px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,transition:"all 0.15s"}} onMouseEnter={e=>e.currentTarget.style.background="rgba(248,113,113,0.14)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(248,113,113,0.08)"}>
+                  <div style={{width:36,height:36,borderRadius:10,background:avatarGrad(c.id),display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:800,color:"#fff",flexShrink:0}}>{c.name.slice(-1)}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:13,marginBottom:2}}>{c.name}</div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      {inactive && <span style={{fontSize:11,color:"#fbbf24",background:"rgba(251,191,36,0.12)",padding:"1px 7px",borderRadius:8,fontWeight:600}}>🕐 ไม่มีบันทึกข้อมูล{daysSince!==null?` ${daysSince} วัน`:" (ไม่เคยบันทึก)"}</span>}
+                      {lowSession && <span style={{fontSize:11,color:"#f87171",background:"rgba(248,113,113,0.12)",padding:"1px 7px",borderRadius:8,fontWeight:600}}>📅 Session เหลือ {sessRemaining} ครั้ง</span>}
+                    </div>
+                  </div>
+                  <span style={{color:D.sub,fontSize:16}}>›</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       <div style={{padding:"14px 18px 8px"}}><div style={{position:"relative"}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:D.sub,fontSize:15}}>🔍</span><Inp placeholder="ค้นหาลูกค้า..." value={search} onChange={e=>setSearch(e.target.value)} style={{paddingLeft:38}}/></div></div>
       <div style={{padding:"0 18px 8px",fontSize:12,color:D.sub,fontWeight:600}}>ลูกค้า {filtered.length} คน{filtered.length!==clients.length&&` (จาก ${clients.length} คน)`}</div>
