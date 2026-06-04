@@ -624,27 +624,28 @@ function SessionTab({ client, onUpdate, isAdmin=false }) {
   const sessions = client.sessions || { bought:0, logs:[] };
   const bought = sessions.bought || 0;
   const logs = sessions.logs || [];
-  const used = logs.length;
+  const used = logs.reduce((s, l) => s + (l.hours || 1), 0);
   const remaining = Math.max(0, bought - used);
   const lowSession = bought > 0 && remaining < 3;
 
   const [showForm, setShowForm] = useState(false);
   const [editBought, setEditBought] = useState(false);
   const [boughtInput, setBoughtInput] = useState(String(bought));
-  const [form, setForm] = useState({ date: new Date().toISOString().slice(0,10), note:"" });
+  const [form, setForm] = useState({ date: new Date().toISOString().slice(0,10), hours:"1", note:"" });
+  const [pricePerHour, setPricePerHour] = useState(500);
 
   const saveBought = () => {
-    const n = parseInt(boughtInput) || 0;
+    const n = parseFloat(boughtInput) || 0;
     onUpdate({ ...client, sessions: { ...sessions, bought: n } });
     setEditBought(false);
   };
 
   const addLog = () => {
     if (!form.date) return;
-    const newLog = { id: Date.now(), date: form.date, note: form.note };
+    const newLog = { id: Date.now(), date: form.date, hours: parseFloat(form.hours) || 1, note: form.note };
     const newLogs = [...logs, newLog].sort((a,b)=>a.date.localeCompare(b.date));
     onUpdate({ ...client, sessions: { ...sessions, logs: newLogs } });
-    setForm({ date: new Date().toISOString().slice(0,10), note:"" });
+    setForm({ date: new Date().toISOString().slice(0,10), hours:"1", note:"" });
     setShowForm(false);
   };
 
@@ -653,29 +654,42 @@ function SessionTab({ client, onUpdate, isAdmin=false }) {
   const pct = bought > 0 ? Math.min(100, (used/bought)*100) : 0;
   const barColor = remaining < 3 ? "#f87171" : remaining < 6 ? D.orange : "#34d399";
 
+  const monthlyData = (() => {
+    const map = {};
+    logs.forEach(l => {
+      const ym = l.date.slice(0, 7);
+      if (!map[ym]) map[ym] = 0;
+      map[ym] += (l.hours || 1);
+    });
+    return Object.entries(map).sort((a,b)=>b[0].localeCompare(a[0])).map(([ym, hours]) => {
+      const [y, m] = ym.split("-");
+      return { ym, label: `${TH_MONTHS[parseInt(m)-1]} ${y}`, hours };
+    });
+  })();
+
   return (
     <div>
       {lowSession && (
         <div style={{background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.4)",borderRadius:12,padding:"10px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
           <span style={{fontSize:20}}>⚠️</span>
           <div>
-            <div style={{fontSize:13,fontWeight:700,color:"#f87171"}}>Session เหลือน้อย!</div>
-            <div style={{fontSize:11,color:D.sub}}>เหลือเพียง {remaining} Session — แนะนำให้ต่อ Package</div>
+            <div style={{fontSize:13,fontWeight:700,color:"#f87171"}}>ชั่วโมงเทรนเหลือน้อย!</div>
+            <div style={{fontSize:11,color:D.sub}}>เหลือเพียง {remaining % 1 === 0 ? remaining : remaining.toFixed(1)} ชั่วโมง — แนะนำให้ต่อ Package</div>
           </div>
         </div>
       )}
 
       <Crd style={{marginBottom:16}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-          <div style={{fontWeight:700,fontSize:14}}>📅 สรุป Session</div>
+          <div style={{fontWeight:700,fontSize:14}}>📅 สรุปชั่วโมงเทรน</div>
           {isAdmin && !editBought && (
             <GBtn onClick={()=>{setBoughtInput(String(bought));setEditBought(true);}} style={{padding:"4px 12px",fontSize:11}}>แก้ไข Package</GBtn>
           )}
         </div>
         {editBought ? (
           <div>
-            <Lbl>จำนวน Session ที่ซื้อ</Lbl>
-            <Inp type="number" min="0" value={boughtInput} onChange={e=>setBoughtInput(e.target.value)}/>
+            <Lbl>จำนวนชั่วโมงที่ซื้อ</Lbl>
+            <Inp type="number" min="0" step="0.5" value={boughtInput} onChange={e=>setBoughtInput(e.target.value)}/>
             <div style={{display:"flex",gap:8,marginTop:12}}>
               <OBtn onClick={saveBought} style={{flex:2}}>✓ บันทึก</OBtn>
               <GBtn onClick={()=>setEditBought(false)} style={{flex:1}}>ยกเลิก</GBtn>
@@ -686,8 +700,9 @@ function SessionTab({ client, onUpdate, isAdmin=false }) {
             <div style={{display:"flex",marginBottom:14}}>
               {[{label:"ซื้อมา",val:bought,color:"#60a5fa"},{label:"ใช้ไปแล้ว",val:used,color:D.orange},{label:"คงเหลือ",val:remaining,color:barColor}].map(({label,val,color})=>(
                 <div key={label} style={{flex:1,textAlign:"center"}}>
-                  <div style={{fontSize:28,fontWeight:800,color,fontFamily:"monospace"}}>{val}</div>
-                  <div style={{fontSize:10,color:D.sub,marginTop:2}}>{label}</div>
+                  <div style={{fontSize:26,fontWeight:800,color,fontFamily:"monospace"}}>{val % 1 === 0 ? val : val.toFixed(1)}</div>
+                  <div style={{fontSize:10,color:D.sub,marginTop:1}}>ชม.</div>
+                  <div style={{fontSize:10,color:D.sub}}>{label}</div>
                 </div>
               ))}
             </div>
@@ -696,7 +711,7 @@ function SessionTab({ client, onUpdate, isAdmin=false }) {
                 <div style={{height:10,background:"#222",borderRadius:5,overflow:"hidden",marginBottom:6}}>
                   <div style={{height:"100%",width:`${pct}%`,background:barColor,borderRadius:5,transition:"width 0.5s"}}/>
                 </div>
-                <div style={{fontSize:11,color:D.sub,textAlign:"center"}}>ใช้ไป {used}/{bought} Session ({Math.round(pct)}%)</div>
+                <div style={{fontSize:11,color:D.sub,textAlign:"center"}}>ใช้ไป {used % 1 === 0 ? used : used.toFixed(1)}/{bought} ชั่วโมง ({Math.round(pct)}%)</div>
               </>
             ) : (
               <div style={{fontSize:12,color:D.dim,textAlign:"center",padding:"6px 0"}}>ยังไม่ได้ตั้งค่า Package {isAdmin&&"— กด \"แก้ไข Package\" เพื่อเพิ่ม"}</div>
@@ -707,19 +722,56 @@ function SessionTab({ client, onUpdate, isAdmin=false }) {
 
       {isAdmin && (showForm ? (
         <Crd style={{marginBottom:16,border:`1px solid ${D.orange}40`}}>
-          <div style={{fontWeight:700,fontSize:14,marginBottom:14,color:D.orange}}>📝 บันทึกการใช้ Session</div>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:14,color:D.orange}}>📝 บันทึก Session</div>
           <Lbl>วันที่</Lbl>
           <Inp type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/>
-          <Lbl>หมายเหตุ</Lbl>
-          <Inp placeholder="เช่น ฟอร์มดีขึ้น, เข่าซ้ายมีปัญหา" value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))}/>
+          <Lbl>จำนวนชั่วโมง</Lbl>
+          <Sel value={form.hours} onChange={e=>setForm(f=>({...f,hours:e.target.value}))}>
+            <option value="0.5">0.5 ชั่วโมง</option>
+            <option value="1">1 ชั่วโมง</option>
+            <option value="1.5">1.5 ชั่วโมง</option>
+            <option value="2">2 ชั่วโมง</option>
+          </Sel>
+          <Lbl>Note</Lbl>
+          <Inp placeholder="เช่น ฟอร์มดีขึ้น, โฟกัสขา" value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))}/>
           <div style={{display:"flex",gap:8,marginTop:16}}>
             <OBtn onClick={addLog} style={{flex:2}}>✓ บันทึก</OBtn>
             <GBtn onClick={()=>setShowForm(false)} style={{flex:1}}>ยกเลิก</GBtn>
           </div>
         </Crd>
       ) : (
-        <OBtn onClick={()=>setShowForm(true)} style={{marginBottom:16}}>+ บันทึกการใช้ Session</OBtn>
+        <OBtn onClick={()=>setShowForm(true)} style={{marginBottom:16}}>+ บันทึก Session</OBtn>
       ))}
+
+      {/* Monthly billing — Admin only */}
+      {isAdmin && monthlyData.length > 0 && (
+        <Crd style={{marginBottom:16}}>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>🗓 สรุปตัดยอดรายเดือน</div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+            <div style={{fontSize:12,color:D.sub,flexShrink:0}}>ราคา/ชั่วโมง (฿)</div>
+            <Inp type="number" min="0" value={pricePerHour} onChange={e=>setPricePerHour(+e.target.value||0)} style={{maxWidth:130}}/>
+          </div>
+          <div style={{borderRadius:10,overflow:"hidden",border:`1px solid ${D.border}`}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 80px 96px",background:D.card2,padding:"7px 12px"}}>
+              <div style={{fontSize:11,fontWeight:700,color:D.sub}}>เดือน</div>
+              <div style={{fontSize:11,fontWeight:700,color:D.sub,textAlign:"right"}}>ชั่วโมง</div>
+              <div style={{fontSize:11,fontWeight:700,color:D.sub,textAlign:"right"}}>ยอดเงิน</div>
+            </div>
+            {monthlyData.map(({ym,label,hours})=>(
+              <div key={ym} style={{display:"grid",gridTemplateColumns:"1fr 80px 96px",padding:"9px 12px",borderTop:`1px solid ${D.border}`}}>
+                <div style={{fontSize:13,fontWeight:600}}>{label}</div>
+                <div style={{fontSize:13,fontWeight:700,color:D.orange,textAlign:"right",fontFamily:"monospace"}}>{hours % 1 === 0 ? hours : hours.toFixed(1)} ชม.</div>
+                <div style={{fontSize:13,fontWeight:700,color:"#34d399",textAlign:"right",fontFamily:"monospace"}}>฿{(hours*pricePerHour).toLocaleString()}</div>
+              </div>
+            ))}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 80px 96px",padding:"9px 12px",borderTop:`1px solid ${D.orange}40`,background:"rgba(249,115,22,0.06)"}}>
+              <div style={{fontSize:13,fontWeight:800,color:D.orange}}>รวมทั้งหมด</div>
+              <div style={{fontSize:13,fontWeight:800,color:D.orange,textAlign:"right",fontFamily:"monospace"}}>{used % 1 === 0 ? used : used.toFixed(1)} ชม.</div>
+              <div style={{fontSize:13,fontWeight:800,color:D.orange,textAlign:"right",fontFamily:"monospace"}}>฿{(used*pricePerHour).toLocaleString()}</div>
+            </div>
+          </div>
+        </Crd>
+      )}
 
       {logs.length === 0 && !showForm && (
         <div style={{textAlign:"center",color:D.dim,padding:"32px 0",fontSize:14}}>
@@ -729,11 +781,11 @@ function SessionTab({ client, onUpdate, isAdmin=false }) {
       )}
       {logs.length > 0 && (
         <Crd>
-          <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>ประวัติการใช้ Session ({used} ครั้ง)</div>
-          {[...logs].reverse().map((log, i) => (
+          <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>ประวัติ Session ({used % 1 === 0 ? used : used.toFixed(1)} ชม. / {logs.length} ครั้ง)</div>
+          {[...logs].reverse().map((log) => (
             <div key={log.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${D.border}`}}>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <div style={{width:28,height:28,borderRadius:8,background:D.orangeDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:D.orange,flexShrink:0}}>{used - i}</div>
+                <div style={{minWidth:34,height:28,borderRadius:8,background:D.orangeDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:D.orange,padding:"0 6px",flexShrink:0}}>{log.hours||1}h</div>
                 <div>
                   <div style={{fontSize:12,fontWeight:600}}>{log.date}</div>
                   {log.note && <div style={{fontSize:11,color:D.sub,marginTop:1}}>{log.note}</div>}
@@ -1075,6 +1127,97 @@ function BackupModal({ clientId, onClose, onRestore }) {
   );
 }
 
+// ─── ADMIN SESSION OVERVIEW (Dashboard) ──────────────────────
+function AdminSessionOverview({ clients }) {
+  const [pricePerHour, setPricePerHour] = useState(500);
+  const currentYM = new Date().toISOString().slice(0, 7);
+
+  const allLogs = clients.flatMap(c => (c.sessions?.logs || []).map(l => ({ ...l, clientId: c.id, clientName: c.name })));
+  if (allLogs.length === 0) return null;
+
+  const monthMap = {};
+  allLogs.forEach(l => {
+    const ym = l.date.slice(0, 7);
+    if (!monthMap[ym]) monthMap[ym] = { hours: 0, sessions: 0 };
+    monthMap[ym].hours += (l.hours || 1);
+    monthMap[ym].sessions += 1;
+  });
+
+  const months = Object.entries(monthMap).sort((a,b)=>b[0].localeCompare(a[0])).map(([ym, data]) => {
+    const [y, m] = ym.split("-");
+    return { ym, label: `${TH_MONTHS[parseInt(m)-1]} ${y}`, ...data };
+  });
+
+  const [selectedMonth, setSelectedMonth] = useState(monthMap[currentYM] ? currentYM : months[0]?.ym || currentYM);
+  const thisMonthData = monthMap[currentYM] || { hours: 0, sessions: 0 };
+  const totalHours = allLogs.reduce((s, l) => s + (l.hours || 1), 0);
+  const selectedData = monthMap[selectedMonth] || { hours: 0, sessions: 0 };
+  const [selY, selM] = selectedMonth.split("-");
+  const selectedLabel = `${TH_MONTHS[parseInt(selM)-1]} ${selY}`;
+
+  const clientBreakdown = clients.map(c => {
+    const logs = (c.sessions?.logs || []).filter(l => l.date.slice(0,7) === selectedMonth);
+    const hours = logs.reduce((s,l) => s + (l.hours || 1), 0);
+    return { c, hours, sessions: logs.length };
+  }).filter(x => x.hours > 0).sort((a,b) => b.hours - a.hours);
+
+  const fmt = v => v % 1 === 0 ? v : v.toFixed(1);
+
+  return (
+    <Crd style={{margin:"12px 18px 0",border:`1px solid ${D.orange}40`,background:"linear-gradient(135deg,#1A1208,#161616)"}}>
+      <div style={{fontWeight:700,fontSize:14,color:D.orange,marginBottom:14}}>📊 สรุปชั่วโมงเทรนทุกลูกค้า</div>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:14}}>
+        {[
+          {label:"เดือนนี้",val:`${fmt(thisMonthData.hours)} ชม.`,color:"#34d399"},
+          {label:"รายได้เดือนนี้",val:`฿${(thisMonthData.hours*pricePerHour).toLocaleString()}`,color:D.orange},
+          {label:"รวมทั้งหมด",val:`${fmt(totalHours)} ชม.`,color:"#60a5fa"},
+        ].map(({label,val,color})=>(
+          <div key={label} style={{background:"rgba(0,0,0,0.3)",borderRadius:10,padding:"10px 8px",textAlign:"center"}}>
+            <div style={{fontSize:14,fontWeight:800,color,fontFamily:"monospace"}}>{val}</div>
+            <div style={{fontSize:10,color:D.sub,marginTop:2}}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+        <div style={{fontSize:12,color:D.sub,flexShrink:0}}>ราคา/ชั่วโมง (฿)</div>
+        <Inp type="number" min="0" value={pricePerHour} onChange={e=>setPricePerHour(+e.target.value||0)} style={{maxWidth:120}}/>
+      </div>
+
+      <Lbl>ดูรายเดือน</Lbl>
+      <Sel value={selectedMonth} onChange={e=>setSelectedMonth(e.target.value)} style={{marginBottom:12}}>
+        {months.map(({ym,label})=><option key={ym} value={ym}>{label}</option>)}
+      </Sel>
+
+      <div style={{fontWeight:700,fontSize:13,marginBottom:8,color:D.text}}>
+        {selectedLabel} — <span style={{color:D.orange}}>{fmt(selectedData.hours)} ชม.</span> · <span style={{color:"#34d399"}}>฿{(selectedData.hours*pricePerHour).toLocaleString()}</span>
+      </div>
+      {clientBreakdown.length === 0 ? (
+        <div style={{color:D.dim,fontSize:12,textAlign:"center",padding:"12px 0"}}>ไม่มีข้อมูลในเดือนนี้</div>
+      ) : (
+        <div style={{borderRadius:10,overflow:"hidden",border:`1px solid ${D.border}`}}>
+          {clientBreakdown.map(({c,hours,sessions},i)=>(
+            <div key={c.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",borderTop:i>0?`1px solid ${D.border}`:"none"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{width:28,height:28,borderRadius:8,background:avatarGrad(c.id),display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"#fff",flexShrink:0}}>{c.name.slice(-1)}</div>
+                <div>
+                  <div style={{fontSize:12,fontWeight:600}}>{c.name}</div>
+                  <div style={{fontSize:10,color:D.sub}}>{sessions} session</div>
+                </div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:13,fontWeight:700,color:D.orange,fontFamily:"monospace"}}>{fmt(hours)} ชม.</div>
+                <div style={{fontSize:11,color:"#34d399",fontFamily:"monospace"}}>฿{(hours*pricePerHour).toLocaleString()}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Crd>
+  );
+}
+
 // ═════════════════════════════════════════════════════════════
 // MAIN APP
 // ═════════════════════════════════════════════════════════════
@@ -1175,7 +1318,8 @@ export default function App({ isAdmin=false }){
     const bestRun=runLogs.length?Math.min(...runLogs.map(l=>l.value)):null;
     const byEx=EXERCISES.map(ex=>{ const logs=client.strengthLogs.filter(l=>l.exercise===ex);if(!logs.length)return null;const best=Math.max(...logs.map(l=>l.weight));return{ex,logs,best,data:logs.map(l=>({date:l.date.slice(5),value:l.weight})),lvInfo:bw?getLevel(ex,client.gender||"male",bw,client.age||25,best):null}; }).filter(Boolean);
     const sessions = client.sessions || { bought:0, logs:[] };
-    const sessionRemaining = Math.max(0, (sessions.bought||0) - (sessions.logs||[]).length);
+    const sessionUsed = (sessions.logs||[]).reduce((s,l)=>s+(l.hours||1),0);
+    const sessionRemaining = Math.max(0, (sessions.bought||0) - sessionUsed);
     const TABS=[["score","🏆 คะแนน"],["target","🎯 เป้าหมาย"],["session",`📅 Session${(sessions.bought||0)>0&&sessionRemaining<3?" 🔴":""}`],["report","📋 รายงาน"],["hyrox","🏁 HYROX"],["strength","💪 แข็งแรง"],["cardio","🫀 ฟิต"],["body","📊 ร่างกาย"],["photos","📸 รูป"],["program","📝 โปรแกรม"]];
     const nameEl=isAdmin&&editName?<input autoFocus value={client.name} style={{...inp,fontSize:16,padding:"4px 8px",width:"auto",maxWidth:180}} onChange={e=>upd(client.id,c=>({...c,name:e.target.value}))} onBlur={()=>setEditName(false)} onKeyDown={e=>e.key==="Enter"&&setEditName(false)}/>:<span onClick={isAdmin?()=>setEditName(true):undefined} style={{cursor:isAdmin?"pointer":"default",borderBottom:isAdmin?`1px dashed ${D.border}`:"none"}}>{client.name}{isAdmin&&<span style={{fontSize:13,color:D.dim}}> ✏️</span>}</span>;
 
@@ -1349,7 +1493,8 @@ export default function App({ isAdmin=false }){
           const startDays = c.startDate ? Math.floor((today - new Date(c.startDate))/(1000*60*60*24)) : 0;
           const inactive = (daysSince !== null && daysSince > 14) || (allDates.length === 0 && startDays > 14);
           const sess = c.sessions || { bought:0, logs:[] };
-          const sessRemaining = Math.max(0, (sess.bought||0) - (sess.logs||[]).length);
+          const sessUsed = (sess.logs||[]).reduce((s,l)=>s+(l.hours||1),0);
+          const sessRemaining = Math.max(0, (sess.bought||0) - sessUsed);
           const lowSession = (sess.bought||0) > 0 && sessRemaining < 3;
           if (!inactive && !lowSession) return null;
           return { c, inactive, daysSince, lowSession, sessRemaining };
@@ -1366,7 +1511,7 @@ export default function App({ isAdmin=false }){
                     <div style={{fontWeight:700,fontSize:13,marginBottom:2}}>{c.name}</div>
                     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                       {inactive && <span style={{fontSize:11,color:"#fbbf24",background:"rgba(251,191,36,0.12)",padding:"1px 7px",borderRadius:8,fontWeight:600}}>🕐 ไม่มีบันทึกข้อมูล{daysSince!==null?` ${daysSince} วัน`:" (ไม่เคยบันทึก)"}</span>}
-                      {lowSession && <span style={{fontSize:11,color:"#f87171",background:"rgba(248,113,113,0.12)",padding:"1px 7px",borderRadius:8,fontWeight:600}}>📅 Session เหลือ {sessRemaining} ครั้ง</span>}
+                      {lowSession && <span style={{fontSize:11,color:"#f87171",background:"rgba(248,113,113,0.12)",padding:"1px 7px",borderRadius:8,fontWeight:600}}>📅 เหลือ {sessRemaining % 1 === 0 ? sessRemaining : sessRemaining.toFixed(1)} ชม.</span>}
                     </div>
                   </div>
                   <span style={{color:D.sub,fontSize:16}}>›</span>
@@ -1376,6 +1521,9 @@ export default function App({ isAdmin=false }){
           </div>
         );
       })()}
+
+      {/* Admin Session Overview */}
+      {isAdmin && <AdminSessionOverview clients={clients}/>}
 
       <div style={{padding:"14px 18px 8px"}}><div style={{position:"relative"}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:D.sub,fontSize:15}}>🔍</span><Inp placeholder="ค้นหาลูกค้า..." value={search} onChange={e=>setSearch(e.target.value)} style={{paddingLeft:38}}/></div></div>
       <div style={{padding:"0 18px 8px",fontSize:12,color:D.sub,fontWeight:600}}>ลูกค้า {filtered.length} คน{filtered.length!==clients.length&&` (จาก ${clients.length} คน)`}</div>
