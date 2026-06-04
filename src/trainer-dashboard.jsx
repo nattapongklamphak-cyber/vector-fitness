@@ -725,13 +725,14 @@ function SessionTab({ client, onUpdate, isAdmin=false }) {
           <div style={{fontWeight:700,fontSize:14,marginBottom:14,color:D.orange}}>📝 บันทึก Session</div>
           <Lbl>วันที่</Lbl>
           <Inp type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/>
-          <Lbl>จำนวนชั่วโมง</Lbl>
-          <Sel value={form.hours} onChange={e=>setForm(f=>({...f,hours:e.target.value}))}>
-            <option value="0.5">0.5 ชั่วโมง</option>
-            <option value="1">1 ชั่วโมง</option>
-            <option value="1.5">1.5 ชั่วโมง</option>
-            <option value="2">2 ชั่วโมง</option>
-          </Sel>
+          <Lbl>เลือกชั่วโมง</Lbl>
+          <div style={{display:"flex",gap:8,marginTop:6,marginBottom:4}}>
+            {["0.5","1","1.5","2"].map(h=>(
+              <button key={h} onClick={()=>setForm(f=>({...f,hours:h}))} style={{flex:1,padding:"14px 0",borderRadius:12,border:`1.5px solid ${form.hours===h?D.orange:D.border}`,cursor:"pointer",background:form.hours===h?D.orange:"transparent",color:form.hours===h?"#fff":D.sub,fontWeight:700,fontSize:15,fontFamily:"inherit",lineHeight:1}}>
+                {h}<div style={{fontSize:10,fontWeight:400,marginTop:3,opacity:0.85}}>ชม.</div>
+              </button>
+            ))}
+          </div>
           <Lbl>Note</Lbl>
           <Inp placeholder="เช่น ฟอร์มดีขึ้น, โฟกัสขา" value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))}/>
           <div style={{display:"flex",gap:8,marginTop:16}}>
